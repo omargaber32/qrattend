@@ -16,6 +16,7 @@
   button:hover { background: #1558b0; }
   button.secondary { background: #6c757d; }
   button.secondary:hover { background: #565e64; }
+  button:disabled { background: #b0b0b0; cursor: not-allowed; }
   #result {
     margin: 20px auto 0; padding: 15px; border-radius: 8px;
     font-size: 18px; font-weight: bold; min-height: 30px; max-width: 320px;
@@ -29,11 +30,25 @@
   #configBox, #sessionBox { max-width: 340px; margin: 10px auto; text-align: left; }
   #configBox input, #sessionBox select { width: 100%; padding: 8px; box-sizing: border-box; margin-top: 4px; font-size: 15px; }
   #configBox label, #sessionBox label { font-size: 13px; color: #555; }
+  #confirmBanner {
+    max-width: 340px; margin: 15px auto; padding: 16px; border-radius: 8px;
+    background: #fff8e1; border: 2px solid #ffca28; font-size: 16px; color: #5c4a00;
+  }
+  #confirmBanner b { font-size: 19px; display: block; margin-bottom: 8px; }
+  #activeBanner {
+    max-width: 340px; margin: 10px auto; padding: 10px; border-radius: 8px;
+    background: #e8f0fe; color: #1a3d7c; font-size: 15px; display: flex;
+    justify-content: space-between; align-items: center;
+  }
+  #counter { font-weight: bold; }
+  #changeSessionBtn { background: transparent; color: #1a73e8; padding: 4px 8px; margin: 0; font-size: 13px; text-decoration: underline; }
+  #queueNote { font-size: 13px; color: #a35b00; margin-top: 8px; max-width: 320px; margin-left: auto; margin-right: auto; }
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
   <h2>QR Attendance Scanner</h2>
-  <p class="sub">Set the session, then scan student QR codes</p>
+  <p class="sub">Set the session, confirm it, then scan</p>
 
   <div id="configBox">
     <label for="scriptUrl">Apps Script Web App URL (paste once, saved in this browser):</label>
@@ -42,35 +57,41 @@
 
   <div id="sessionBox">
     <label for="sessionSelect">Session:</label>
-    <select id="sessionSelect">
-      <option value="1">Session 1</option>
-      <option value="2">Session 2</option>
-      <option value="3">Session 3</option>
-      <option value="4">Session 4</option>
-      <option value="5">Session 5</option>
-      <option value="6">Session 6</option>
-      <option value="7">Session 7</option>
-      <option value="8">Session 8</option>
-      <option value="9">Session 9</option>
-      <option value="10">Session 10</option>
-    </select>
+    <select id="sessionSelect"></select>
   </div>
 
-  <div>
-    <button id="startBtn">📷 Start Camera</button>
-    <button id="stopBtn" class="secondary" style="display:none;">⏹ Stop Camera</button>
+  <div id="confirmBanner">
+    <b>Confirm before scanning</b>
+    You're about to mark attendance for <span id="confirmSessionLabel">Session 1</span>. Make sure this matches today's actual session.
+    <div><button id="confirmBtn">✅ Confirm & Continue</button></div>
   </div>
 
-  <div id="reader"></div>
+  <div id="activeBanner" class="hidden">
+    <span>Marking: <b id="activeSessionLabel">Session 1</b> — <span id="counter">– / –</span> present</span>
+    <button id="changeSessionBtn">change</button>
+  </div>
 
-  <div class="divider">— or —</div>
-  <button id="uploadBtn" class="secondary">🖼 Upload QR Image</button>
-  <input type="file" id="fileInput" accept="image/*">
+  <div id="scanArea" class="hidden">
+    <div>
+      <button id="startBtn">📷 Start Camera</button>
+      <button id="stopBtn" class="secondary" style="display:none;">⏹ Stop Camera</button>
+    </div>
 
-  <div id="result" class="idle">Waiting to scan...</div>
+    <div id="reader"></div>
+
+    <div class="divider">— or —</div>
+    <button id="uploadBtn" class="secondary">🖼 Upload QR Image</button>
+    <input type="file" id="fileInput" accept="image/*">
+
+    <div id="result" class="idle">Waiting to scan...</div>
+    <div id="queueNote" class="hidden"></div>
+  </div>
 
   <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
   <script>
+    const SESSIONS = 14;
+    const QUEUE_KEY = 'attendanceOfflineQueue';
+
     const resultDiv = document.getElementById('result');
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
@@ -78,17 +99,34 @@
     const fileInput = document.getElementById('fileInput');
     const scriptUrlInput = document.getElementById('scriptUrl');
     const sessionSelect = document.getElementById('sessionSelect');
+    const confirmBanner = document.getElementById('confirmBanner');
+    const confirmSessionLabel = document.getElementById('confirmSessionLabel');
+    const confirmBtn = document.getElementById('confirmBtn');
+    const activeBanner = document.getElementById('activeBanner');
+    const activeSessionLabel = document.getElementById('activeSessionLabel');
+    const changeSessionBtn = document.getElementById('changeSessionBtn');
+    const scanArea = document.getElementById('scanArea');
+    const counterSpan = document.getElementById('counter');
+    const queueNote = document.getElementById('queueNote');
 
-    // Remember the Apps Script URL and last-used session in this browser
+    // Populate the session dropdown (1..14)
+    for (let s = 1; s <= SESSIONS; s++) {
+      const opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = 'Session ' + s;
+      sessionSelect.appendChild(opt);
+    }
+
+    // Remember Apps Script URL and last-used session in this browser
     scriptUrlInput.value = localStorage.getItem('attendanceScriptUrl') || '';
     scriptUrlInput.addEventListener('change', function () {
       localStorage.setItem('attendanceScriptUrl', scriptUrlInput.value.trim());
     });
     sessionSelect.value = localStorage.getItem('attendanceLastSession') || '1';
-    sessionSelect.addEventListener('change', function () {
-      localStorage.setItem('attendanceLastSession', sessionSelect.value);
-    });
 
+    let confirmedSession = null;
+    let presentCount = 0;
+    let totalCount = 0;
     let lastCode = '';
     let lastTime = 0;
     const html5QrCode = new Html5Qrcode("reader");
@@ -99,33 +137,145 @@
       resultDiv.textContent = text;
     }
 
+    function scriptUrl() { return scriptUrlInput.value.trim(); }
+
+    function updateCounterDisplay() {
+      counterSpan.textContent = presentCount + ' / ' + totalCount;
+    }
+
+    // ---- Offline queue ----
+    function getQueue() {
+      try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); }
+      catch (e) { return []; }
+    }
+    function setQueue(q) { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); }
+    function queueScan(payload) {
+      const q = getQueue();
+      q.push(payload);
+      setQueue(q);
+      updateQueueNote();
+    }
+    function updateQueueNote() {
+      const q = getQueue();
+      if (q.length === 0) { queueNote.classList.add('hidden'); return; }
+      queueNote.classList.remove('hidden');
+      queueNote.textContent = '⏳ ' + q.length + ' scan(s) queued — will retry automatically when connection returns.';
+    }
+    function flushQueue() {
+      const url = scriptUrl();
+      if (!url) return;
+      const q = getQueue();
+      if (q.length === 0) return;
+      const remaining = [];
+      let chain = Promise.resolve();
+      q.forEach(function (payload) {
+        chain = chain.then(function () {
+          return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+          }).then(function (res) { return res.json(); })
+            .then(function (res) {
+              if (!(res && res.ok)) remaining.push(payload); // keep for retry if server rejected it oddly
+            })
+            .catch(function () {
+              remaining.push(payload); // still offline, keep it
+            });
+        });
+      });
+      chain.then(function () {
+        setQueue(remaining);
+        updateQueueNote();
+      });
+    }
+    setInterval(flushQueue, 8000);
+    window.addEventListener('online', flushQueue);
+    updateQueueNote();
+
+    // ---- Session confirmation flow ----
+    function refreshLabels() {
+      const label = 'Session ' + sessionSelect.value;
+      confirmSessionLabel.textContent = label;
+      activeSessionLabel.textContent = label;
+    }
+    refreshLabels();
+    sessionSelect.addEventListener('change', refreshLabels);
+
+    confirmBtn.addEventListener('click', function () {
+      if (!scriptUrl()) {
+        alert('Paste your Apps Script Web App URL first.');
+        return;
+      }
+      confirmedSession = sessionSelect.value;
+      localStorage.setItem('attendanceLastSession', confirmedSession);
+
+      confirmBanner.classList.add('hidden');
+      activeBanner.classList.remove('hidden');
+      scanArea.classList.remove('hidden');
+      activeSessionLabel.textContent = 'Session ' + confirmedSession;
+
+      presentCount = 0; totalCount = 0;
+      counterSpan.textContent = 'loading...';
+      fetch(scriptUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'count', session: confirmedSession })
+      }).then(function (res) { return res.json(); })
+        .then(function (res) {
+          if (res.ok) { presentCount = res.present; totalCount = res.total; }
+          updateCounterDisplay();
+        })
+        .catch(function () { counterSpan.textContent = '– / –'; });
+    });
+
+    changeSessionBtn.addEventListener('click', function () {
+      if (cameraRunning) {
+        html5QrCode.stop().catch(function () {});
+        cameraRunning = false;
+        startBtn.style.display = 'inline-block';
+        stopBtn.style.display = 'none';
+      }
+      confirmedSession = null;
+      confirmBanner.classList.remove('hidden');
+      activeBanner.classList.add('hidden');
+      scanArea.classList.add('hidden');
+      showResult('idle', 'Waiting to scan...');
+    });
+
+    // ---- Scanning ----
     function processCode(decodedText, allowRepeat) {
       const now = Date.now();
-      // decodedText is just the Student ID now (one QR per student)
-      const key = decodedText + '|' + sessionSelect.value;
+      const key = decodedText + '|' + confirmedSession;
       if (!allowRepeat && key === lastCode && (now - lastTime) < 3000) return;
       lastCode = key;
       lastTime = now;
 
-      const scriptUrl = scriptUrlInput.value.trim();
-      if (!scriptUrl) {
+      const url = scriptUrl();
+      if (!url) {
         showResult('error', 'Paste your Apps Script Web App URL above first.');
         return;
       }
 
       showResult('idle', 'Checking...');
+      const payload = { id: decodedText, session: confirmedSession };
 
-      fetch(scriptUrl, {
+      fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids CORS preflight
-        body: JSON.stringify({ id: decodedText, session: sessionSelect.value })
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
       })
         .then(function (res) { return res.json(); })
         .then(function (res) {
           showResult(res.ok ? (res.alreadyMarked ? 'warning' : 'success') : 'error', res.message);
+          if (res.ok && !res.alreadyMarked) {
+            presentCount += 1;
+            updateCounterDisplay();
+          }
         })
-        .catch(function (err) {
-          showResult('error', 'Could not reach the sheet: ' + err.message);
+        .catch(function () {
+          // offline or unreachable — queue it instead of losing the scan
+          queueScan(payload);
+          showResult('warning', 'No connection — scan queued, will sync automatically.');
         });
     }
 
