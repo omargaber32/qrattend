@@ -1,321 +1,589 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QR Attendance Scanner</title>
+<title>HackerRank Attendance System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background: #f5f5f5; margin: 0; }
-  h2 { color: #333; margin-bottom: 4px; }
-  p.sub { color: #666; margin-top: 0; font-size: 14px; }
-  #reader { width: 320px; max-width: 90vw; margin: 15px auto; border-radius: 8px; overflow: hidden; }
+  :root {
+    --bg-primary: #0a0e14;
+    --bg-secondary: #10161d;
+    --bg-card: #151c24;
+    --bg-card-hover: #1a222b;
+    --accent: #2ec866;
+    --accent-bright: #3ee97e;
+    --accent-dim: rgba(46, 200, 102, 0.12);
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-dim: #5a6572;
+    --border: #232b34;
+    --border-bright: #2ec86644;
+    --danger: #f85149;
+    --danger-dim: rgba(248, 81, 73, 0.12);
+    --warning: #d29922;
+    --warning-dim: rgba(210, 153, 34, 0.12);
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg-primary);
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(46,200,102,0.06) 0%, transparent 40%),
+      radial-gradient(circle at 85% 100%, rgba(46,200,102,0.04) 0%, transparent 40%);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding-bottom: 40px;
+  }
+
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ---- Header ---- */
+  header {
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+    padding: 18px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  header .prompt {
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 15px;
+  }
+  header h1 {
+    font-size: 17px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: 0.2px;
+  }
+  header .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 16px;
+    background: var(--accent);
+    margin-left: 2px;
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 20px 16px;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin: 0 0 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .card-title::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: inline-block;
+  }
+
+  label { font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 6px; }
+
+  select {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-family: 'JetBrains Mono', monospace;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 18px;
+  }
+  select:focus { outline: none; border-color: var(--accent); }
+
   button {
-    background: #1a73e8; color: white; border: none; padding: 12px 22px;
-    border-radius: 6px; font-size: 16px; cursor: pointer; margin: 6px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 18px;
+    cursor: pointer;
+    transition: all 0.15s ease;
   }
-  button:hover { background: #1558b0; }
-  button.secondary { background: #6c757d; }
-  button.secondary:hover { background: #565e64; }
-  button:disabled { background: #b0b0b0; cursor: not-allowed; }
-  #result {
-    margin: 20px auto 0; padding: 15px; border-radius: 8px;
-    font-size: 18px; font-weight: bold; min-height: 30px; max-width: 320px;
+  .btn-primary {
+    background: var(--accent);
+    color: #05130a;
+    width: 100%;
   }
-  .idle { background: #e2e3e5; color: #383d41; }
-  .success { background: #d4edda; color: #155724; }
-  .warning { background: #fff3cd; color: #856404; }
-  .error { background: #f8d7da; color: #721c24; }
-  #fileInput { display: none; }
-  .divider { color: #999; margin: 10px 0; font-size: 13px; }
-  #configBox, #sessionBox { max-width: 340px; margin: 10px auto; text-align: left; }
-  #configBox input, #sessionBox select { width: 100%; padding: 8px; box-sizing: border-box; margin-top: 4px; font-size: 15px; }
-  #configBox label, #sessionBox label { font-size: 13px; color: #555; }
-  #confirmBanner {
-    max-width: 340px; margin: 15px auto; padding: 16px; border-radius: 8px;
-    background: #fff8e1; border: 2px solid #ffca28; font-size: 16px; color: #5c4a00;
+  .btn-primary:hover { background: var(--accent-bright); }
+  .btn-primary:disabled { background: #2a3138; color: var(--text-dim); cursor: not-allowed; }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
   }
-  #confirmBanner b { font-size: 19px; display: block; margin-bottom: 8px; }
+  .btn-secondary:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+
+  .btn-danger-outline {
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger-dim);
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  .btn-danger-outline:hover { background: var(--danger-dim); }
+
+  .btn-link {
+    background: transparent;
+    color: var(--accent);
+    padding: 4px 8px;
+    font-size: 12px;
+    text-decoration: underline;
+  }
+
+  .btn-row { display: flex; gap: 8px; margin-top: 10px; }
+  .btn-row button { flex: 1; }
+
+  /* ---- Active session banner ---- */
   #activeBanner {
-    max-width: 340px; margin: 10px auto; padding: 10px; border-radius: 8px;
-    background: #e8f0fe; color: #1a3d7c; font-size: 15px; display: flex;
-    justify-content: space-between; align-items: center;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--accent-dim);
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius);
+    margin-bottom: 16px;
   }
-  #counter { font-weight: bold; }
-  #changeSessionBtn { background: transparent; color: #1a73e8; padding: 4px 8px; margin: 0; font-size: 13px; text-decoration: underline; }
-  #queueNote { font-size: 13px; color: #a35b00; margin-top: 8px; max-width: 320px; margin-left: auto; margin-right: auto; }
+  #activeBanner .label { font-size: 13px; color: var(--text-secondary); }
+  #activeBanner .session { color: var(--accent); font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+  #counter { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--accent); font-size: 15px; }
+
+  /* ---- Scanner ---- */
+  #reader { border-radius: 8px; overflow: hidden; margin: 14px 0; border: 1px solid var(--border); }
+  .divider { text-align: center; color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin: 14px 0; }
+  #fileInput { display: none; }
+
+  #result {
+    margin-top: 14px;
+    padding: 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    border: 1px solid var(--border);
+  }
+  .idle { background: var(--bg-secondary); color: var(--text-secondary); }
+  .success { background: var(--accent-dim); color: var(--accent-bright); border-color: var(--border-bright); }
+  .warning { background: var(--warning-dim); color: var(--warning); border-color: rgba(210,153,34,0.3); }
+  .error { background: var(--danger-dim); color: var(--danger); border-color: rgba(248,81,73,0.3); }
+
+  #queueNote { font-size: 12px; color: var(--warning); margin-top: 10px; }
+
+  /* ---- History ---- */
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-main { flex: 1; min-width: 0; }
+  .history-text { font-size: 13px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .history-meta { font-size: 11px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+  .badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .badge-success { background: var(--accent-dim); color: var(--accent-bright); }
+  .badge-warning { background: var(--warning-dim); color: var(--warning); }
+  .badge-error { background: var(--danger-dim); color: var(--danger); }
+  #emptyHistory { color: var(--text-dim); font-size: 13px; text-align: center; padding: 10px 0; }
+
   .hidden { display: none !important; }
+
+  footer {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 30px;
+  }
 </style>
 </head>
 <body>
-  <h2>QR Attendance Scanner</h2>
-  <p class="sub">Set the session, confirm it, then scan</p>
 
-  <div id="configBox">
-    <label for="scriptUrl">Apps Script Web App URL (paste once, saved in this browser):</label>
-    <input type="text" id="scriptUrl" placeholder="https://script.google.com/macros/s/XXXX/exec">
-  </div>
+<header>
+  <span class="prompt">&gt;_</span>
+  <h1>HackerRank Attendance System<span class="cursor"></span></h1>
+</header>
 
-  <div id="sessionBox">
-    <label for="sessionSelect">Session:</label>
+<main>
+
+  <!-- Session selection -->
+  <div class="card" id="sessionCard">
+    <p class="card-title">Session</p>
+    <label for="sessionSelect">Choose the session for this scan</label>
     <select id="sessionSelect"></select>
+    <div class="btn-row">
+      <button id="confirmBtn" class="btn-primary">Confirm &amp; Continue</button>
+    </div>
   </div>
 
-  <div id="confirmBanner">
-    <b>Confirm before scanning</b>
-    You're about to mark attendance for <span id="confirmSessionLabel">Session 1</span>. Make sure this matches today's actual session.
-    <div><button id="confirmBtn">✅ Confirm & Continue</button></div>
-  </div>
-
+  <!-- Active session bar -->
   <div id="activeBanner" class="hidden">
-    <span>Marking: <b id="activeSessionLabel">Session 1</b> — <span id="counter">– / –</span> present</span>
-    <button id="changeSessionBtn">change</button>
+    <span class="label">Marking <span class="session" id="activeSessionLabel">Session 1</span> — <span id="counter">–/–</span> present</span>
+    <button id="changeSessionBtn" class="btn-link">change</button>
   </div>
 
-  <div id="scanArea" class="hidden">
-    <div>
-      <button id="startBtn">📷 Start Camera</button>
-      <button id="stopBtn" class="secondary" style="display:none;">⏹ Stop Camera</button>
+  <!-- Scanner -->
+  <div class="card hidden" id="scanCard">
+    <p class="card-title">Scanner</p>
+    <div class="btn-row">
+      <button id="startBtn" class="btn-primary">Start Camera</button>
+      <button id="stopBtn" class="btn-secondary hidden">Stop</button>
     </div>
 
     <div id="reader"></div>
 
-    <div class="divider">— or —</div>
-    <button id="uploadBtn" class="secondary">🖼 Upload QR Image</button>
+    <div class="divider">or</div>
+    <button id="uploadBtn" class="btn-secondary" style="width:100%;">Upload QR Image</button>
     <input type="file" id="fileInput" accept="image/*">
 
     <div id="result" class="idle">Waiting to scan...</div>
     <div id="queueNote" class="hidden"></div>
   </div>
 
-  <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
-  <script>
-    const SESSIONS = 14;
-    const QUEUE_KEY = 'attendanceOfflineQueue';
+  <!-- Scan history -->
+  <div class="card">
+    <p class="card-title">Recent Scans <span style="color:var(--text-dim); font-weight:400; text-transform:none; letter-spacing:normal;">(this device)</span></p>
+    <div id="historyList"></div>
+    <div id="emptyHistory">No scans yet.</div>
+    <div class="btn-row">
+      <button id="clearHistoryBtn" class="btn-danger-outline" style="width:100%;">Clear History</button>
+    </div>
+  </div>
 
-    const resultDiv = document.getElementById('result');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const uploadBtn = document.getElementById('uploadBtn');
-    const fileInput = document.getElementById('fileInput');
-    const scriptUrlInput = document.getElementById('scriptUrl');
-    const sessionSelect = document.getElementById('sessionSelect');
-    const confirmBanner = document.getElementById('confirmBanner');
-    const confirmSessionLabel = document.getElementById('confirmSessionLabel');
-    const confirmBtn = document.getElementById('confirmBtn');
-    const activeBanner = document.getElementById('activeBanner');
-    const activeSessionLabel = document.getElementById('activeSessionLabel');
-    const changeSessionBtn = document.getElementById('changeSessionBtn');
-    const scanArea = document.getElementById('scanArea');
-    const counterSpan = document.getElementById('counter');
-    const queueNote = document.getElementById('queueNote');
+</main>
 
-    // Populate the session dropdown (1..14)
-    for (let s = 1; s <= SESSIONS; s++) {
-      const opt = document.createElement('option');
-      opt.value = s;
-      opt.textContent = 'Session ' + s;
-      sessionSelect.appendChild(opt);
+<footer>HackerRank Attendance System · local scan log only</footer>
+
+<script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
+<script>
+  // ============================================================
+  // CONFIG — paste your Apps Script Web App URL here (ends in /exec)
+  // ============================================================
+  const SCRIPT_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+  // ============================================================
+
+  const SESSIONS = 14;
+  const QUEUE_KEY = 'attendanceOfflineQueue';
+  const HISTORY_KEY = 'attendanceScanHistory';
+  const HISTORY_LIMIT = 50;
+
+  const sessionSelect = document.getElementById('sessionSelect');
+  const confirmBtn = document.getElementById('confirmBtn');
+  const sessionCard = document.getElementById('sessionCard');
+  const activeBanner = document.getElementById('activeBanner');
+  const activeSessionLabel = document.getElementById('activeSessionLabel');
+  const changeSessionBtn = document.getElementById('changeSessionBtn');
+  const scanCard = document.getElementById('scanCard');
+  const counterSpan = document.getElementById('counter');
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const uploadBtn = document.getElementById('uploadBtn');
+  const fileInput = document.getElementById('fileInput');
+  const resultDiv = document.getElementById('result');
+  const queueNote = document.getElementById('queueNote');
+  const historyList = document.getElementById('historyList');
+  const emptyHistory = document.getElementById('emptyHistory');
+  const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+
+  // Populate session dropdown (1..14)
+  for (let s = 1; s <= SESSIONS; s++) {
+    const opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = 'Session ' + s;
+    sessionSelect.appendChild(opt);
+  }
+  sessionSelect.value = localStorage.getItem('attendanceLastSession') || '1';
+
+  let confirmedSession = null;
+  let presentCount = 0;
+  let totalCount = 0;
+  let lastCode = '';
+  let lastTime = 0;
+  const html5QrCode = new Html5Qrcode("reader");
+  let cameraRunning = false;
+
+  function showResult(cls, text) {
+    resultDiv.className = cls;
+    resultDiv.textContent = text;
+  }
+
+  function updateCounterDisplay() {
+    counterSpan.textContent = presentCount + ' / ' + totalCount;
+  }
+
+  function checkConfigured() {
+    if (!SCRIPT_URL || SCRIPT_URL.indexOf('PASTE_YOUR') === 0) {
+      showResult('error', 'SCRIPT_URL is not set in scanner.html — edit the CONFIG section at the top of the file.');
+      confirmBtn.disabled = true;
+      return false;
     }
+    return true;
+  }
 
-    // Remember Apps Script URL and last-used session in this browser
-    scriptUrlInput.value = localStorage.getItem('attendanceScriptUrl') || '';
-    scriptUrlInput.addEventListener('change', function () {
-      localStorage.setItem('attendanceScriptUrl', scriptUrlInput.value.trim());
+  // ---- Scan history (local only) ----
+  function getHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+    catch (e) { return []; }
+  }
+  function saveHistory(list) { localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); }
+  function addHistoryEntry(entry) {
+    const list = getHistory();
+    list.unshift(entry); // newest first
+    while (list.length > HISTORY_LIMIT) list.pop();
+    saveHistory(list);
+    renderHistory();
+  }
+  function renderHistory() {
+    const list = getHistory();
+    historyList.innerHTML = '';
+    emptyHistory.classList.toggle('hidden', list.length > 0);
+    list.forEach(function (entry) {
+      const row = document.createElement('div');
+      row.className = 'history-item';
+
+      const main = document.createElement('div');
+      main.className = 'history-main';
+      const text = document.createElement('div');
+      text.className = 'history-text';
+      text.textContent = entry.message;
+      const meta = document.createElement('div');
+      meta.className = 'history-meta';
+      meta.textContent = entry.time + ' · Session ' + entry.session;
+      main.appendChild(text);
+      main.appendChild(meta);
+
+      const badge = document.createElement('span');
+      badge.className = 'badge badge-' + entry.status;
+      badge.textContent = entry.status === 'success' ? 'present'
+        : entry.status === 'warning' ? (entry.queued ? 'queued' : 'dup')
+        : 'error';
+
+      row.appendChild(main);
+      row.appendChild(badge);
+      historyList.appendChild(row);
     });
-    sessionSelect.value = localStorage.getItem('attendanceLastSession') || '1';
+  }
+  clearHistoryBtn.addEventListener('click', function () {
+    if (confirm('Clear local scan history on this device? This does not affect the spreadsheet.')) {
+      saveHistory([]);
+      renderHistory();
+    }
+  });
+  renderHistory();
 
-    let confirmedSession = null;
-    let presentCount = 0;
-    let totalCount = 0;
-    let lastCode = '';
-    let lastTime = 0;
-    const html5QrCode = new Html5Qrcode("reader");
-    let cameraRunning = false;
-
-    function showResult(cls, text) {
-      resultDiv.className = cls;
-      resultDiv.textContent = text;
-    }
-
-    function scriptUrl() { return scriptUrlInput.value.trim(); }
-
-    function updateCounterDisplay() {
-      counterSpan.textContent = presentCount + ' / ' + totalCount;
-    }
-
-    // ---- Offline queue ----
-    function getQueue() {
-      try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); }
-      catch (e) { return []; }
-    }
-    function setQueue(q) { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); }
-    function queueScan(payload) {
-      const q = getQueue();
-      q.push(payload);
-      setQueue(q);
-      updateQueueNote();
-    }
-    function updateQueueNote() {
-      const q = getQueue();
-      if (q.length === 0) { queueNote.classList.add('hidden'); return; }
-      queueNote.classList.remove('hidden');
-      queueNote.textContent = '⏳ ' + q.length + ' scan(s) queued — will retry automatically when connection returns.';
-    }
-    function flushQueue() {
-      const url = scriptUrl();
-      if (!url) return;
-      const q = getQueue();
-      if (q.length === 0) return;
-      const remaining = [];
-      let chain = Promise.resolve();
-      q.forEach(function (payload) {
-        chain = chain.then(function () {
-          return fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(payload)
-          }).then(function (res) { return res.json(); })
-            .then(function (res) {
-              if (!(res && res.ok)) remaining.push(payload); // keep for retry if server rejected it oddly
-            })
-            .catch(function () {
-              remaining.push(payload); // still offline, keep it
-            });
-        });
-      });
-      chain.then(function () {
-        setQueue(remaining);
-        updateQueueNote();
-      });
-    }
-    setInterval(flushQueue, 8000);
-    window.addEventListener('online', flushQueue);
+  // ---- Offline queue ----
+  function getQueue() {
+    try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); }
+    catch (e) { return []; }
+  }
+  function setQueue(q) { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); }
+  function queueScan(payload) {
+    const q = getQueue();
+    q.push(payload);
+    setQueue(q);
     updateQueueNote();
-
-    // ---- Session confirmation flow ----
-    function refreshLabels() {
-      const label = 'Session ' + sessionSelect.value;
-      confirmSessionLabel.textContent = label;
-      activeSessionLabel.textContent = label;
-    }
-    refreshLabels();
-    sessionSelect.addEventListener('change', refreshLabels);
-
-    confirmBtn.addEventListener('click', function () {
-      if (!scriptUrl()) {
-        alert('Paste your Apps Script Web App URL first.');
-        return;
-      }
-      confirmedSession = sessionSelect.value;
-      localStorage.setItem('attendanceLastSession', confirmedSession);
-
-      confirmBanner.classList.add('hidden');
-      activeBanner.classList.remove('hidden');
-      scanArea.classList.remove('hidden');
-      activeSessionLabel.textContent = 'Session ' + confirmedSession;
-
-      presentCount = 0; totalCount = 0;
-      counterSpan.textContent = 'loading...';
-      fetch(scriptUrl(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'count', session: confirmedSession })
-      }).then(function (res) { return res.json(); })
-        .then(function (res) {
-          if (res.ok) { presentCount = res.present; totalCount = res.total; }
-          updateCounterDisplay();
-        })
-        .catch(function () { counterSpan.textContent = '– / –'; });
-    });
-
-    changeSessionBtn.addEventListener('click', function () {
-      if (cameraRunning) {
-        html5QrCode.stop().catch(function () {});
-        cameraRunning = false;
-        startBtn.style.display = 'inline-block';
-        stopBtn.style.display = 'none';
-      }
-      confirmedSession = null;
-      confirmBanner.classList.remove('hidden');
-      activeBanner.classList.add('hidden');
-      scanArea.classList.add('hidden');
-      showResult('idle', 'Waiting to scan...');
-    });
-
-    // ---- Scanning ----
-    function processCode(decodedText, allowRepeat) {
-      const now = Date.now();
-      const key = decodedText + '|' + confirmedSession;
-      if (!allowRepeat && key === lastCode && (now - lastTime) < 3000) return;
-      lastCode = key;
-      lastTime = now;
-
-      const url = scriptUrl();
-      if (!url) {
-        showResult('error', 'Paste your Apps Script Web App URL above first.');
-        return;
-      }
-
-      showResult('idle', 'Checking...');
-      const payload = { id: decodedText, session: confirmedSession };
-
-      fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
-      })
-        .then(function (res) { return res.json(); })
-        .then(function (res) {
-          showResult(res.ok ? (res.alreadyMarked ? 'warning' : 'success') : 'error', res.message);
-          if (res.ok && !res.alreadyMarked) {
-            presentCount += 1;
-            updateCounterDisplay();
-          }
-        })
-        .catch(function () {
-          // offline or unreachable — queue it instead of losing the scan
-          queueScan(payload);
-          showResult('warning', 'No connection — scan queued, will sync automatically.');
-        });
-    }
-
-    startBtn.addEventListener('click', function () {
-      showResult('idle', 'Requesting camera access...');
-      html5QrCode.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 250 },
-        function (decodedText) { processCode(decodedText, false); }
-      ).then(function () {
-        cameraRunning = true;
-        startBtn.style.display = 'none';
-        stopBtn.style.display = 'inline-block';
-        showResult('idle', 'Point camera at a student QR code');
-      }).catch(function (err) {
-        showResult('error', 'Camera error: ' + err + ' (try Upload QR Image instead)');
+  }
+  function updateQueueNote() {
+    const q = getQueue();
+    if (q.length === 0) { queueNote.classList.add('hidden'); return; }
+    queueNote.classList.remove('hidden');
+    queueNote.textContent = q.length + ' scan(s) queued offline — will sync automatically.';
+  }
+  function flushQueue() {
+    if (!checkConfigured()) return;
+    const q = getQueue();
+    if (q.length === 0) return;
+    const remaining = [];
+    let chain = Promise.resolve();
+    q.forEach(function (payload) {
+      chain = chain.then(function () {
+        return fetch(SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        }).then(function (res) { return res.json(); })
+          .then(function (res) {
+            if (!(res && res.ok)) remaining.push(payload);
+          })
+          .catch(function () { remaining.push(payload); });
       });
     });
-
-    stopBtn.addEventListener('click', function () {
-      if (cameraRunning) {
-        html5QrCode.stop().then(function () {
-          cameraRunning = false;
-          startBtn.style.display = 'inline-block';
-          stopBtn.style.display = 'none';
-          showResult('idle', 'Camera stopped');
-        });
-      }
+    chain.then(function () {
+      setQueue(remaining);
+      updateQueueNote();
     });
+  }
+  setInterval(flushQueue, 8000);
+  window.addEventListener('online', flushQueue);
+  updateQueueNote();
 
-    uploadBtn.addEventListener('click', function () { fileInput.click(); });
+  // ---- Session confirmation flow ----
+  confirmBtn.addEventListener('click', function () {
+    if (!checkConfigured()) return;
 
-    fileInput.addEventListener('change', function (e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      showResult('idle', 'Reading image...');
-      html5QrCode.scanFile(file, true)
-        .then(function (decodedText) { processCode(decodedText, true); })
-        .catch(function (err) { showResult('error', 'Could not read QR from image: ' + err); });
+    confirmedSession = sessionSelect.value;
+    localStorage.setItem('attendanceLastSession', confirmedSession);
+
+    sessionCard.classList.add('hidden');
+    activeBanner.classList.remove('hidden');
+    scanCard.classList.remove('hidden');
+    activeSessionLabel.textContent = 'Session ' + confirmedSession;
+
+    presentCount = 0; totalCount = 0;
+    counterSpan.textContent = '...';
+    fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'count', session: confirmedSession })
+    }).then(function (res) { return res.json(); })
+      .then(function (res) {
+        if (res.ok) { presentCount = res.present; totalCount = res.total; }
+        updateCounterDisplay();
+      })
+      .catch(function () { counterSpan.textContent = '–/–'; });
+  });
+
+  changeSessionBtn.addEventListener('click', function () {
+    if (cameraRunning) {
+      html5QrCode.stop().catch(function () {});
+      cameraRunning = false;
+      startBtn.classList.remove('hidden');
+      stopBtn.classList.add('hidden');
+    }
+    confirmedSession = null;
+    sessionCard.classList.remove('hidden');
+    activeBanner.classList.add('hidden');
+    scanCard.classList.add('hidden');
+    showResult('idle', 'Waiting to scan...');
+  });
+
+  // ---- Scanning ----
+  function processCode(decodedText, allowRepeat) {
+    const now = Date.now();
+    const key = decodedText + '|' + confirmedSession;
+    if (!allowRepeat && key === lastCode && (now - lastTime) < 3000) return;
+    lastCode = key;
+    lastTime = now;
+
+    if (!checkConfigured()) return;
+
+    showResult('idle', 'Checking...');
+    const payload = { id: decodedText, session: confirmedSession };
+    const timeLabel = new Date().toLocaleTimeString();
+
+    fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (res) {
+        const cls = res.ok ? (res.alreadyMarked ? 'warning' : 'success') : 'error';
+        showResult(cls, res.message);
+        addHistoryEntry({ time: timeLabel, session: confirmedSession, message: res.message, status: cls, queued: false });
+        if (res.ok && !res.alreadyMarked) {
+          presentCount += 1;
+          updateCounterDisplay();
+        }
+      })
+      .catch(function () {
+        queueScan(payload);
+        const msg = 'Offline — ID ' + decodedText + ' queued for Session ' + confirmedSession;
+        showResult('warning', msg);
+        addHistoryEntry({ time: timeLabel, session: confirmedSession, message: msg, status: 'warning', queued: true });
+      });
+  }
+
+  startBtn.addEventListener('click', function () {
+    showResult('idle', 'Requesting camera access...');
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: 250 },
+      function (decodedText) { processCode(decodedText, false); }
+    ).then(function () {
+      cameraRunning = true;
+      startBtn.classList.add('hidden');
+      stopBtn.classList.remove('hidden');
+      showResult('idle', 'Point camera at a student QR code');
+    }).catch(function (err) {
+      showResult('error', 'Camera error: ' + err + ' (try Upload QR Image instead)');
     });
-  </script>
+  });
+
+  stopBtn.addEventListener('click', function () {
+    if (cameraRunning) {
+      html5QrCode.stop().then(function () {
+        cameraRunning = false;
+        startBtn.classList.remove('hidden');
+        stopBtn.classList.add('hidden');
+        showResult('idle', 'Camera stopped');
+      });
+    }
+  });
+
+  uploadBtn.addEventListener('click', function () { fileInput.click(); });
+
+  fileInput.addEventListener('change', function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    showResult('idle', 'Reading image...');
+    html5QrCode.scanFile(file, true)
+      .then(function (decodedText) { processCode(decodedText, true); })
+      .catch(function (err) { showResult('error', 'Could not read QR from image: ' + err); });
+  });
+
+  checkConfigured();
+</script>
 </body>
 </html>
