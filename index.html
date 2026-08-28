@@ -6,6 +6,7 @@
 <title>Project Engine Attendance System</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root {
     --bg-primary: #0a0e14;
@@ -35,25 +36,31 @@
       radial-gradient(circle at 85% 100%, rgba(46,200,102,0.04) 0%, transparent 40%);
     color: var(--text-primary);
     min-height: 100vh;
-    padding-bottom: 40px;
+    padding-bottom: 78px; /* room for bottom nav */
   }
   .mono { font-family: 'JetBrains Mono', monospace; }
 
   header {
     border-bottom: 1px solid var(--border);
     background: var(--bg-secondary);
-    padding: 18px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
+    padding: 16px 20px;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
   }
-  header .prompt { color: var(--accent); font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; }
-  header h1 { font-size: 17px; font-weight: 700; margin: 0; letter-spacing: 0.2px; }
-  header .cursor { display: inline-block; width: 8px; height: 16px; background: var(--accent); margin-left: 2px; animation: blink 1.1s steps(1) infinite; }
+  header .prompt { color: var(--accent); font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 14px; }
+  header h1 { font-size: 15px; font-weight: 700; margin: 0; letter-spacing: 0.2px; }
+  header .cursor { display: inline-block; width: 7px; height: 14px; background: var(--accent); margin-left: 2px; animation: blink 1.1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
 
+  #topBar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--border);
+    font-size: 13px; color: var(--text-secondary);
+  }
+  #topBar b { color: var(--accent); }
+
   main { max-width: 480px; margin: 0 auto; padding: 20px 16px; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
 
   .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 16px; }
   .card-title {
@@ -63,8 +70,7 @@
   .card-title::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
 
   label { font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 6px; }
-
-  select, input[type=text], input[type=password] {
+  select, input[type=text], input[type=password], input[type=tel], input[type=email] {
     width: 100%; padding: 12px; background: var(--bg-secondary); border: 1px solid var(--border);
     border-radius: 8px; color: var(--text-primary); font-size: 15px; font-family: 'JetBrains Mono', monospace;
   }
@@ -92,15 +98,91 @@
   .btn-row button { flex: 1; }
   .btn-row-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
 
-  #topBar {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--border);
-    font-size: 13px; color: var(--text-secondary);
-  }
-  #topBar b { color: var(--accent); }
-
   #loginError { color: var(--danger); font-size: 13px; margin-top: 8px; min-height: 16px; }
 
+  /* ---- Bottom nav ---- */
+  #bottomNav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--bg-secondary); border-top: 1px solid var(--border);
+    display: flex; justify-content: space-around; padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
+    z-index: 50;
+  }
+  .nav-btn {
+    background: transparent; border: none; color: var(--text-dim); font-size: 11px; font-weight: 600;
+    display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 10px; flex: 1;
+  }
+  .nav-btn .icon { font-size: 19px; }
+  .nav-btn.active { color: var(--accent); }
+
+  /* ---- Main tab ---- */
+  .greeting { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .greeting .name { color: var(--accent); }
+  .subgreeting { color: var(--text-dim); font-size: 13px; margin-bottom: 18px; }
+  .kpi-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .kpi-value { font-size: 26px; font-weight: 700; color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+  .kpi-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+  #chartWrap { display: flex; align-items: flex-end; gap: 4px; height: 140px; padding-top: 10px; }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .bar { width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; transition: height 0.3s ease; }
+  .bar-label { font-size: 9px; color: var(--text-dim); margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
+  .bar-count { font-size: 9px; color: var(--accent); font-family: 'JetBrains Mono', monospace; margin-bottom: 2px; }
+
+  /* ---- Sessions / Students lists ---- */
+  .list-card {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px; margin-bottom: 10px; cursor: pointer; transition: border-color 0.15s ease;
+  }
+  .list-card:hover { border-color: var(--border-bright); }
+  .list-card .title { font-weight: 600; font-size: 14px; }
+  .list-card .subtitle { font-size: 12px; color: var(--text-dim); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+  .list-card .stat { color: var(--accent); font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 15px; }
+  .chevron { color: var(--text-dim); margin-left: 8px; }
+
+  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .fab {
+    background: var(--accent); color: #05130a; border: none; width: 36px; height: 36px; border-radius: 50%;
+    font-size: 20px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ---- Detail overlay ---- */
+  #detailOverlay {
+    position: fixed; inset: 0; background: var(--bg-primary); z-index: 100; overflow-y: auto;
+  }
+  #detailOverlay .detail-header {
+    display: flex; align-items: center; gap: 10px; padding: 16px; border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary); position: sticky; top: 0;
+  }
+  #detailOverlay .back-btn { background: transparent; color: var(--text-primary); font-size: 20px; padding: 4px 8px; }
+  #detailOverlay .detail-title { font-weight: 700; font-size: 16px; }
+  #detailContent { padding: 18px 16px; max-width: 480px; margin: 0 auto; }
+
+  .info-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .info-row:last-child { border-bottom: none; }
+  .info-row .k { color: var(--text-dim); }
+  .info-row .v { font-family: 'JetBrains Mono', monospace; color: var(--text-primary); text-align: right; }
+
+  .session-pill {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 6px; font-size: 11px; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace; margin: 3px;
+  }
+  .session-pill.present { background: var(--accent-dim); color: var(--accent-bright); border: 1px solid var(--border-bright); }
+  .session-pill.absent { background: var(--bg-secondary); color: var(--text-dim); border: 1px solid var(--border); }
+
+  /* ---- Modal (add student) ---- */
+  #modalOverlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200;
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  #modalCard {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px 16px 0 0;
+    padding: 20px; width: 100%; max-width: 480px;
+  }
+  #modalCard h3 { margin: 0 0 14px 0; font-size: 16px; }
+
+  /* ---- Scan tab (reused from previous scanner) ---- */
   #activeBanner {
     display: flex; align-items: center; justify-content: space-between; padding: 12px 16px;
     background: var(--accent-dim); border: 1px solid var(--border-bright); border-radius: var(--radius); margin-bottom: 16px;
@@ -108,11 +190,9 @@
   #activeBanner .label { font-size: 13px; color: var(--text-secondary); }
   #activeBanner .session { color: var(--accent); font-weight: 700; font-family: 'JetBrains Mono', monospace; }
   #counter { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--accent); font-size: 15px; }
-
   #reader { border-radius: 8px; overflow: hidden; margin: 14px 0; border: 1px solid var(--border); }
   .divider { text-align: center; color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin: 14px 0; }
   #fileInput { display: none; }
-
   #result {
     margin-top: 14px; padding: 14px; border-radius: 8px; font-size: 14px; font-weight: 600;
     min-height: 20px; font-family: 'JetBrains Mono', monospace; border: 1px solid var(--border);
@@ -121,7 +201,6 @@
   .success { background: var(--accent-dim); color: var(--accent-bright); border-color: var(--border-bright); }
   .warning { background: var(--warning-dim); color: var(--warning); border-color: rgba(210,153,34,0.3); }
   .error { background: var(--danger-dim); color: var(--danger); border-color: rgba(248,81,73,0.3); }
-
   #queueNote { font-size: 12px; color: var(--warning); margin-top: 10px; }
 
   .history-item {
@@ -139,11 +218,12 @@
   .badge-success { background: var(--accent-dim); color: var(--accent-bright); }
   .badge-warning { background: var(--warning-dim); color: var(--warning); }
   .badge-error { background: var(--danger-dim); color: var(--danger); }
-  #emptyHistory, #emptyLog { color: var(--text-dim); font-size: 13px; text-align: center; padding: 10px 0; }
+  #emptyHistory, #emptyLog, #emptyStudents { color: var(--text-dim); font-size: 13px; text-align: center; padding: 10px 0; }
   #logMeta { font-size: 11px; color: var(--text-dim); margin-top: 10px; text-align: center; }
 
   .hidden { display: none !important; }
-  footer { text-align: center; color: var(--text-dim); font-size: 11px; font-family: 'JetBrains Mono', monospace; margin-top: 30px; }
+  footer { text-align: center; color: var(--text-dim); font-size: 11px; font-family: 'JetBrains Mono', monospace; margin-top: 20px; }
+  .loading-text { color: var(--text-dim); font-size: 13px; text-align: center; padding: 20px 0; }
 </style>
 </head>
 <body>
@@ -175,105 +255,179 @@
     <div id="loginError"></div>
   </div>
 
-  <!-- Session selection -->
-  <div class="card hidden" id="sessionCard">
-    <p class="card-title">Session</p>
-    <label for="sessionSelect">Choose the session for this scan</label>
-    <select id="sessionSelect"></select>
-    <div class="btn-row">
-      <button id="confirmBtn" class="btn-primary">Confirm &amp; Continue</button>
+  <!-- ============ MAIN TAB ============ -->
+  <div class="tab-content" id="tab-main">
+    <div class="greeting">Hello, <span class="name" id="greetName">—</span></div>
+    <div class="subgreeting">Here's how the term is going</div>
+
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-value" id="kpiTotalStudents">–</div>
+        <div class="kpi-label">Total Students</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value" id="kpiMostSession">–</div>
+        <div class="kpi-label">Most Attended</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="card-title">Attendance by Session</p>
+      <div id="chartWrap"><div class="loading-text">Loading chart...</div></div>
     </div>
   </div>
 
-  <!-- Active session bar -->
-  <div id="activeBanner" class="hidden">
-    <span class="label">Marking <span class="session" id="activeSessionLabel">Session 1</span> — <span id="counter">–/–</span> present</span>
-    <button id="changeSessionBtn" class="btn-link">change</button>
+  <!-- ============ SCAN TAB ============ -->
+  <div class="tab-content" id="tab-scan">
+    <div class="card" id="sessionCard">
+      <p class="card-title">Session</p>
+      <label for="sessionSelect">Choose the session for this scan</label>
+      <select id="sessionSelect"></select>
+      <div class="btn-row">
+        <button id="confirmBtn" class="btn-primary">Confirm &amp; Continue</button>
+      </div>
+    </div>
+
+    <div id="activeBanner" class="hidden">
+      <span class="label">Marking <span class="session" id="activeSessionLabel">Session 1</span> — <span id="counter">–/–</span> present</span>
+      <button id="changeSessionBtn" class="btn-link">change</button>
+    </div>
+
+    <div class="card hidden" id="scanCard">
+      <p class="card-title">Scanner</p>
+      <div class="btn-row">
+        <button id="startBtn" class="btn-primary">Start Camera</button>
+        <button id="stopBtn" class="btn-secondary hidden">Stop</button>
+      </div>
+      <div id="reader"></div>
+      <div class="divider">or</div>
+      <button id="uploadBtn" class="btn-secondary" style="width:100%;">Upload QR Image</button>
+      <input type="file" id="fileInput" accept="image/*">
+      <div id="result" class="idle">Waiting to scan...</div>
+      <div id="queueNote" class="hidden"></div>
+    </div>
+
+    <div class="card hidden" id="localHistoryCard">
+      <p class="card-title">Recent Scans <span style="color:var(--text-dim); font-weight:400; text-transform:none; letter-spacing:normal;">(this device)</span></p>
+      <div id="historyList"></div>
+      <div id="emptyHistory">No scans yet.</div>
+      <div class="btn-row">
+        <button id="clearHistoryBtn" class="btn-danger-outline" style="width:100%;">Clear Local History</button>
+      </div>
+    </div>
+
+    <div class="card" id="serverLogCard">
+      <p class="card-title">Attendance Log <span style="color:var(--text-dim); font-weight:400; text-transform:none; letter-spacing:normal;">(all admins, saved in sheet)</span></p>
+      <div class="btn-row-2col">
+        <div class="field">
+          <label for="filterSession">Session</label>
+          <select id="filterSession"><option value="">All</option></select>
+        </div>
+        <div class="field">
+          <label for="filterStatus">Status</label>
+          <select id="filterStatus">
+            <option value="">All</option>
+            <option value="Present">Present</option>
+            <option value="Already Present">Already Present</option>
+            <option value="Not Found">Not Found</option>
+          </select>
+        </div>
+      </div>
+      <div class="btn-row-2col">
+        <div class="field">
+          <label for="filterAdmin">Admin</label>
+          <input type="text" id="filterAdmin" placeholder="e.g. sara">
+        </div>
+        <div class="field">
+          <label for="filterStudent">Student (ID or name)</label>
+          <input type="text" id="filterStudent" placeholder="e.g. S001">
+        </div>
+      </div>
+      <button id="loadLogBtn" class="btn-primary">Load Log</button>
+      <div id="logList" style="margin-top:12px;"></div>
+      <div id="emptyLog" class="hidden">No matching scans.</div>
+      <div id="logMeta"></div>
+    </div>
   </div>
 
-  <!-- Scanner -->
-  <div class="card hidden" id="scanCard">
-    <p class="card-title">Scanner</p>
-    <div class="btn-row">
-      <button id="startBtn" class="btn-primary">Start Camera</button>
-      <button id="stopBtn" class="btn-secondary hidden">Stop</button>
-    </div>
-    <div id="reader"></div>
-    <div class="divider">or</div>
-    <button id="uploadBtn" class="btn-secondary" style="width:100%;">Upload QR Image</button>
-    <input type="file" id="fileInput" accept="image/*">
-    <div id="result" class="idle">Waiting to scan...</div>
-    <div id="queueNote" class="hidden"></div>
+  <!-- ============ SESSIONS TAB ============ -->
+  <div class="tab-content" id="tab-sessions">
+    <div class="section-header"><p class="card-title" style="margin:0;">14 Sessions</p></div>
+    <div id="sessionsList"><div class="loading-text">Loading sessions...</div></div>
   </div>
 
-  <!-- Local recent scans -->
-  <div class="card hidden" id="localHistoryCard">
-    <p class="card-title">Recent Scans <span style="color:var(--text-dim); font-weight:400; text-transform:none; letter-spacing:normal;">(this device)</span></p>
-    <div id="historyList"></div>
-    <div id="emptyHistory">No scans yet.</div>
-    <div class="btn-row">
-      <button id="clearHistoryBtn" class="btn-danger-outline" style="width:100%;">Clear Local History</button>
+  <!-- ============ STUDENTS TAB ============ -->
+  <div class="tab-content" id="tab-students">
+    <div class="section-header">
+      <p class="card-title" style="margin:0;">Students</p>
+      <button class="fab" id="addStudentBtn">+</button>
     </div>
-  </div>
-
-  <!-- Server-side filterable log -->
-  <div class="card hidden" id="serverLogCard">
-    <p class="card-title">Attendance Log <span style="color:var(--text-dim); font-weight:400; text-transform:none; letter-spacing:normal;">(all admins, saved in sheet)</span></p>
-
-    <div class="btn-row-2col">
-      <div class="field">
-        <label for="filterSession">Session</label>
-        <select id="filterSession"><option value="">All</option></select>
-      </div>
-      <div class="field">
-        <label for="filterStatus">Status</label>
-        <select id="filterStatus">
-          <option value="">All</option>
-          <option value="Present">Present</option>
-          <option value="Already Present">Already Present</option>
-          <option value="Not Found">Not Found</option>
-        </select>
-      </div>
-    </div>
-    <div class="btn-row-2col">
-      <div class="field">
-        <label for="filterAdmin">Admin</label>
-        <input type="text" id="filterAdmin" placeholder="e.g. sara">
-      </div>
-      <div class="field">
-        <label for="filterStudent">Student (ID or name)</label>
-        <input type="text" id="filterStudent" placeholder="e.g. S001">
-      </div>
-    </div>
-    <button id="loadLogBtn" class="btn-primary">Load Log</button>
-
-    <div id="logList" style="margin-top:12px;"></div>
-    <div id="emptyLog" class="hidden">No matching scans.</div>
-    <div id="logMeta"></div>
+    <div id="studentsList"><div class="loading-text">Loading students...</div></div>
+    <div id="emptyStudents" class="hidden">No students yet.</div>
   </div>
 
 </main>
 
-<footer>Project Engine Attendance System</footer>
+<!-- Bottom nav -->
+<nav id="bottomNav" class="hidden">
+  <button class="nav-btn active" data-tab="main"><span class="icon">🏠</span>Main</button>
+  <button class="nav-btn" data-tab="scan"><span class="icon">📷</span>Scan</button>
+  <button class="nav-btn" data-tab="sessions"><span class="icon">📅</span>Sessions</button>
+  <button class="nav-btn" data-tab="students"><span class="icon">🎓</span>Students</button>
+</nav>
+
+<!-- Detail overlay (session / student) -->
+<div id="detailOverlay" class="hidden">
+  <div class="detail-header">
+    <button class="back-btn" id="detailBackBtn">←</button>
+    <div class="detail-title" id="detailTitle">Details</div>
+  </div>
+  <div id="detailContent"></div>
+</div>
+
+<!-- Add student modal -->
+<div id="modalOverlay" class="hidden">
+  <div id="modalCard">
+    <h3>Add Student</h3>
+    <div class="field">
+      <label for="newStudentName">Full name</label>
+      <input type="text" id="newStudentName">
+    </div>
+    <div class="field">
+      <label for="newStudentPhone">Phone</label>
+      <input type="tel" id="newStudentPhone">
+    </div>
+    <div class="field">
+      <label for="newStudentEmail">Email</label>
+      <input type="email" id="newStudentEmail">
+    </div>
+    <div id="addStudentError" style="color:var(--danger); font-size:13px; min-height:16px; margin-bottom:6px;"></div>
+    <div class="btn-row">
+      <button class="btn-secondary" id="cancelAddStudent">Cancel</button>
+      <button class="btn-primary" id="submitAddStudent">Add Student</button>
+    </div>
+  </div>
+</div>
 
 <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
 <script>
   // ============================================================
   // CONFIG — paste your Apps Script Web App URL here (ends in /exec)
   // ============================================================
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz3J7Fvmq-CvvZWFuVG221GqldkFI-T41jXUf6oF7UDWXlqeojuuGaIIPPO5l5Z9Z9S/exec";
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx7PumlTAXBV9MKF5H_k-LNgDScuuSw49JUfNpL76fGyE0Xdg2CIe1pTDCUyjA720Ul/exec";
   // ============================================================
 
   const SESSIONS = 14;
   const QUEUE_KEY = 'attendanceOfflineQueue';
   const HISTORY_KEY = 'attendanceScanHistory';
   const HISTORY_LIMIT = 50;
-  const ADMIN_KEY = 'attendanceAdmin';
+  const ADMIN_KEY = 'attendanceAdmin'; // localStorage now, so login survives closing the tab
 
   // ---- Elements ----
   const topBar = document.getElementById('topBar');
   const topBarName = document.getElementById('topBarName');
   const logoutBtn = document.getElementById('logoutBtn');
+  const bottomNav = document.getElementById('bottomNav');
 
   const loginCard = document.getElementById('loginCard');
   const loginUser = document.getElementById('loginUser');
@@ -284,12 +438,10 @@
   const sessionCard = document.getElementById('sessionCard');
   const sessionSelect = document.getElementById('sessionSelect');
   const confirmBtn = document.getElementById('confirmBtn');
-
   const activeBanner = document.getElementById('activeBanner');
   const activeSessionLabel = document.getElementById('activeSessionLabel');
   const changeSessionBtn = document.getElementById('changeSessionBtn');
   const counterSpan = document.getElementById('counter');
-
   const scanCard = document.getElementById('scanCard');
   const startBtn = document.getElementById('startBtn');
   const stopBtn = document.getElementById('stopBtn');
@@ -297,13 +449,10 @@
   const fileInput = document.getElementById('fileInput');
   const resultDiv = document.getElementById('result');
   const queueNote = document.getElementById('queueNote');
-
   const localHistoryCard = document.getElementById('localHistoryCard');
   const historyList = document.getElementById('historyList');
   const emptyHistory = document.getElementById('emptyHistory');
   const clearHistoryBtn = document.getElementById('clearHistoryBtn');
-
-  const serverLogCard = document.getElementById('serverLogCard');
   const filterSession = document.getElementById('filterSession');
   const filterStatus = document.getElementById('filterStatus');
   const filterAdmin = document.getElementById('filterAdmin');
@@ -312,6 +461,29 @@
   const logList = document.getElementById('logList');
   const emptyLog = document.getElementById('emptyLog');
   const logMeta = document.getElementById('logMeta');
+
+  const greetName = document.getElementById('greetName');
+  const kpiTotalStudents = document.getElementById('kpiTotalStudents');
+  const kpiMostSession = document.getElementById('kpiMostSession');
+  const chartWrap = document.getElementById('chartWrap');
+
+  const sessionsList = document.getElementById('sessionsList');
+  const studentsList = document.getElementById('studentsList');
+  const emptyStudents = document.getElementById('emptyStudents');
+  const addStudentBtn = document.getElementById('addStudentBtn');
+
+  const detailOverlay = document.getElementById('detailOverlay');
+  const detailBackBtn = document.getElementById('detailBackBtn');
+  const detailTitle = document.getElementById('detailTitle');
+  const detailContent = document.getElementById('detailContent');
+
+  const modalOverlay = document.getElementById('modalOverlay');
+  const newStudentName = document.getElementById('newStudentName');
+  const newStudentPhone = document.getElementById('newStudentPhone');
+  const newStudentEmail = document.getElementById('newStudentEmail');
+  const addStudentError = document.getElementById('addStudentError');
+  const cancelAddStudent = document.getElementById('cancelAddStudent');
+  const submitAddStudent = document.getElementById('submitAddStudent');
 
   // Populate session dropdowns (1..14)
   for (let s = 1; s <= SESSIONS; s++) {
@@ -332,7 +504,6 @@
   let cameraRunning = false;
 
   function showResult(cls, text) { resultDiv.className = cls; resultDiv.textContent = text; }
-
   function checkConfigured() {
     if (!SCRIPT_URL || SCRIPT_URL.indexOf('PASTE_YOUR') === 0) {
       loginError.textContent = 'SCRIPT_URL is not set in scanner.html — edit the CONFIG section at the top of the file.';
@@ -341,7 +512,6 @@
     }
     return true;
   }
-
   function apiCall(payload) {
     return fetch(SCRIPT_URL, {
       method: 'POST',
@@ -350,29 +520,25 @@
     }).then(function (res) { return res.json(); });
   }
 
-  // ---- Admin session ----
-  function getAdmin() {
-    try { return JSON.parse(sessionStorage.getItem(ADMIN_KEY)); } catch (e) { return null; }
-  }
-  function setAdmin(admin) { sessionStorage.setItem(ADMIN_KEY, JSON.stringify(admin)); }
-  function clearAdmin() { sessionStorage.removeItem(ADMIN_KEY); }
+  // ---- Admin session (persisted in localStorage) ----
+  function getAdmin() { try { return JSON.parse(localStorage.getItem(ADMIN_KEY)); } catch (e) { return null; } }
+  function setAdmin(admin) { localStorage.setItem(ADMIN_KEY, JSON.stringify(admin)); }
+  function clearAdmin() { localStorage.removeItem(ADMIN_KEY); }
 
   function showLoggedInUI(admin) {
     topBarName.textContent = admin.name;
     topBar.classList.remove('hidden');
     loginCard.classList.add('hidden');
-    sessionCard.classList.remove('hidden');
-    localHistoryCard.classList.remove('hidden');
-    serverLogCard.classList.remove('hidden');
+    bottomNav.classList.remove('hidden');
+    greetName.textContent = admin.name;
     renderHistory();
+    switchTab('main');
   }
-
   function showLoggedOutUI() {
     topBar.classList.add('hidden');
     loginCard.classList.remove('hidden');
-    [sessionCard, activeBanner, scanCard, localHistoryCard, serverLogCard].forEach(function (el) {
-      el.classList.add('hidden');
-    });
+    bottomNav.classList.add('hidden');
+    document.querySelectorAll('.tab-content').forEach(function (el) { el.classList.remove('active'); });
   }
 
   loginBtn.addEventListener('click', function () {
@@ -380,15 +546,11 @@
     const username = loginUser.value.trim();
     const password = loginPass.value;
     if (!username || !password) { loginError.textContent = 'Enter a username and password.'; return; }
-
     loginError.textContent = '';
-    loginBtn.disabled = true;
-    loginBtn.textContent = 'Checking...';
-
+    loginBtn.disabled = true; loginBtn.textContent = 'Checking...';
     apiCall({ action: 'login', username: username, password: password })
       .then(function (res) {
-        loginBtn.disabled = false;
-        loginBtn.textContent = 'Log In';
+        loginBtn.disabled = false; loginBtn.textContent = 'Log In';
         if (res.ok) {
           setAdmin({ username: res.username, name: res.name });
           loginPass.value = '';
@@ -398,8 +560,7 @@
         }
       })
       .catch(function () {
-        loginBtn.disabled = false;
-        loginBtn.textContent = 'Log In';
+        loginBtn.disabled = false; loginBtn.textContent = 'Log In';
         loginError.textContent = 'Could not reach the server. Check your connection.';
       });
   });
@@ -411,7 +572,243 @@
     showLoggedOutUI();
   });
 
-  // ---- Local scan history ----
+  // ============================================================
+  // BOTTOM NAV / TAB SWITCHING
+  // ============================================================
+  function switchTab(name) {
+    document.querySelectorAll('.tab-content').forEach(function (el) { el.classList.remove('active'); });
+    document.getElementById('tab-' + name).classList.add('active');
+    document.querySelectorAll('.nav-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.tab === name);
+    });
+    if (name === 'main') loadDashboard();
+    if (name === 'sessions') loadSessionsList();
+    if (name === 'students') loadStudentsList();
+  }
+  document.querySelectorAll('.nav-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () { switchTab(btn.dataset.tab); });
+  });
+
+  // ============================================================
+  // MAIN TAB — dashboard
+  // ============================================================
+  function loadDashboard() {
+    kpiTotalStudents.textContent = '…';
+    kpiMostSession.textContent = '…';
+    chartWrap.innerHTML = '<div class="loading-text">Loading chart...</div>';
+    apiCall({ action: 'getDashboard' }).then(function (res) {
+      if (!res.ok) { chartWrap.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>'; return; }
+      kpiTotalStudents.textContent = res.totalStudents;
+      kpiMostSession.textContent = res.mostAttendedSession.count > 0
+        ? 'S' + res.mostAttendedSession.session + ' (' + res.mostAttendedSession.count + ')'
+        : '—';
+
+      const maxCount = Math.max.apply(null, res.sessionCounts.map(function (s) { return s.count; }).concat([1]));
+      chartWrap.innerHTML = '';
+      res.sessionCounts.forEach(function (sc) {
+        const col = document.createElement('div');
+        col.className = 'bar-col';
+        const countLabel = document.createElement('div');
+        countLabel.className = 'bar-count';
+        countLabel.textContent = sc.count;
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+        bar.style.height = Math.max(2, (sc.count / maxCount) * 100) + '%';
+        const label = document.createElement('div');
+        label.className = 'bar-label';
+        label.textContent = sc.session;
+        col.appendChild(countLabel);
+        col.appendChild(bar);
+        col.appendChild(label);
+        chartWrap.appendChild(col);
+      });
+    }).catch(function () {
+      chartWrap.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
+    });
+  }
+
+  // ============================================================
+  // SESSIONS TAB
+  // ============================================================
+  function loadSessionsList() {
+    sessionsList.innerHTML = '<div class="loading-text">Loading sessions...</div>';
+    apiCall({ action: 'getDashboard' }).then(function (res) {
+      sessionsList.innerHTML = '';
+      if (!res.ok) { sessionsList.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>'; return; }
+      res.sessionCounts.forEach(function (sc) {
+        const card = document.createElement('div');
+        card.className = 'list-card';
+        card.innerHTML =
+          '<div><div class="title">Session ' + sc.session + '</div>' +
+          '<div class="subtitle">attended: ' + sc.count + ' / ' + res.totalStudents + '</div></div>' +
+          '<div style="display:flex;align-items:center;"><span class="stat">' + sc.count + '</span><span class="chevron">›</span></div>';
+        card.addEventListener('click', function () { openSessionDetail(sc.session); });
+        sessionsList.appendChild(card);
+      });
+    }).catch(function () {
+      sessionsList.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
+    });
+  }
+
+  function openSessionDetail(session) {
+    detailTitle.textContent = 'Session ' + session;
+    detailContent.innerHTML = '<div class="loading-text">Loading attendees...</div>';
+    detailOverlay.classList.remove('hidden');
+    apiCall({ action: 'getSessionAttendees', session: session }).then(function (res) {
+      if (!res.ok) { detailContent.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>'; return; }
+      let html = '<div class="card"><p class="card-title">Summary</p>' +
+        '<div class="info-row"><span class="k">Attended</span><span class="v">' + res.count + ' / ' + res.total + '</span></div></div>';
+      html += '<div class="card"><p class="card-title">Attendees</p>';
+      if (res.attendees.length === 0) {
+        html += '<div class="loading-text">No one has attended this session yet.</div>';
+      } else {
+        res.attendees.forEach(function (a) {
+          html += '<div class="history-item"><div class="history-main">' +
+            '<div class="history-text">' + escapeHtml(a.name || a.id) + '</div>' +
+            '<div class="history-meta">ID: ' + escapeHtml(a.id) + (a.time ? ' · ' + escapeHtml(a.time) : '') + '</div>' +
+            '</div><span class="badge badge-success">present</span></div>';
+        });
+      }
+      html += '</div>';
+      detailContent.innerHTML = html;
+    }).catch(function () {
+      detailContent.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
+    });
+  }
+
+  // ============================================================
+  // STUDENTS TAB
+  // ============================================================
+  function loadStudentsList() {
+    studentsList.innerHTML = '<div class="loading-text">Loading students...</div>';
+    emptyStudents.classList.add('hidden');
+    apiCall({ action: 'getStudentsList' }).then(function (res) {
+      studentsList.innerHTML = '';
+      if (!res.ok) { studentsList.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>'; return; }
+      if (res.students.length === 0) { emptyStudents.classList.remove('hidden'); return; }
+      res.students.forEach(function (s) {
+        const card = document.createElement('div');
+        card.className = 'list-card';
+        card.innerHTML =
+          '<div><div class="title">' + escapeHtml(s.name || s.id) + '</div>' +
+          '<div class="subtitle">ID: ' + escapeHtml(s.id) + ' · attended ' + s.attendedCount + ' session' + (s.attendedCount === 1 ? '' : 's') + '</div></div>' +
+          '<span class="chevron">›</span>';
+        card.addEventListener('click', function () { openStudentDetail(s.id); });
+        studentsList.appendChild(card);
+      });
+    }).catch(function () {
+      studentsList.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
+    });
+  }
+
+  function openStudentDetail(id) {
+    detailTitle.textContent = 'Student';
+    detailContent.innerHTML = '<div class="loading-text">Loading student...</div>';
+    detailOverlay.classList.remove('hidden');
+    apiCall({ action: 'getStudentDetail', id: id }).then(function (res) {
+      if (!res.ok) { detailContent.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>'; return; }
+      const s = res.student;
+      detailTitle.textContent = s.name || s.id;
+      let html = '<div class="card"><p class="card-title">Details</p>' +
+        '<div class="info-row"><span class="k">Name</span><span class="v">' + escapeHtml(s.name || '-') + '</span></div>' +
+        '<div class="info-row"><span class="k">ID</span><span class="v">' + escapeHtml(s.id) + '</span></div>' +
+        '<div class="info-row"><span class="k">Phone</span><span class="v">' + escapeHtml(s.phone || '-') + '</span></div>' +
+        '<div class="info-row"><span class="k">Email</span><span class="v">' + escapeHtml(s.email || '-') + '</span></div>' +
+        '</div>';
+      html += '<div class="card"><p class="card-title">Sessions Attended</p><div>';
+      res.sessions.forEach(function (sess) {
+        html += '<span class="session-pill ' + (sess.present ? 'present' : 'absent') + '" title="Session ' + sess.session + (sess.time ? ' — ' + sess.time : '') + '">' + sess.session + '</span>';
+      });
+      html += '</div></div>';
+      detailContent.innerHTML = html;
+    }).catch(function () {
+      detailContent.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
+    });
+  }
+
+  detailBackBtn.addEventListener('click', function () { detailOverlay.classList.add('hidden'); });
+
+  // ---- Add student modal ----
+  addStudentBtn.addEventListener('click', function () {
+    newStudentName.value = ''; newStudentPhone.value = ''; newStudentEmail.value = '';
+    addStudentError.textContent = '';
+    submitAddStudent.disabled = false; submitAddStudent.textContent = 'Add Student';
+    modalOverlay.classList.remove('hidden');
+  });
+  cancelAddStudent.addEventListener('click', function () { modalOverlay.classList.add('hidden'); });
+
+  submitAddStudent.addEventListener('click', function () {
+    const name = newStudentName.value.trim();
+    const phone = newStudentPhone.value.trim();
+    const email = newStudentEmail.value.trim();
+    if (!name) { addStudentError.textContent = 'Name is required.'; return; }
+    addStudentError.textContent = '';
+    submitAddStudent.disabled = true;
+    submitAddStudent.textContent = 'Adding...';
+
+    apiCall({ action: 'addStudent', name: name, phone: phone, email: email })
+      .then(function (res) {
+        submitAddStudent.disabled = false;
+        submitAddStudent.textContent = 'Add Student';
+        if (!res.ok) { addStudentError.textContent = res.message || 'Could not add student.'; return; }
+        modalOverlay.classList.add('hidden');
+        loadStudentsList();
+        downloadStudentCardPDF(res);
+      })
+      .catch(function () {
+        submitAddStudent.disabled = false;
+        submitAddStudent.textContent = 'Add Student';
+        addStudentError.textContent = 'Could not reach the server.';
+      });
+  });
+
+  function downloadStudentCardPDF(student) {
+    const qrUrl = student.qrUrl || ('https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(student.id));
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = function () {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width; canvas.height = img.height;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        const dataUrl = canvas.toDataURL('image/png');
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit: 'mm', format: [90, 55] });
+        doc.setFillColor(10, 14, 20);
+        doc.rect(0, 0, 90, 55, 'F');
+        doc.setTextColor(46, 200, 102);
+        doc.setFontSize(8);
+        doc.text('PROJECT ENGINE ATTENDANCE', 5, 7);
+        doc.addImage(dataUrl, 'PNG', 5, 10, 40, 40);
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(12);
+        doc.text(String(student.name), 48, 20);
+        doc.setFontSize(9);
+        doc.setTextColor(180, 180, 180);
+        doc.text('ID: ' + student.id, 48, 27);
+        if (student.phone) doc.text('Phone: ' + student.phone, 48, 33);
+        if (student.email) doc.text('Email: ' + student.email, 48, 39);
+        doc.save(student.id + '_qr_card.pdf');
+      } catch (e) {
+        alert('Student was added, but the QR card PDF could not be generated (' + e.message + '). You can still find their QR in the Codes sheet.');
+      }
+    };
+    img.onerror = function () {
+      alert('Student was added, but the QR image could not be loaded for the PDF. You can still find their QR in the Codes sheet.');
+    };
+    img.src = qrUrl;
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // ============================================================
+  // SCAN TAB (camera scanning, offline queue, local history, server log)
+  // ============================================================
   function getHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch (e) { return []; } }
   function saveHistoryList(list) { localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); }
   function addHistoryEntry(entry) {
@@ -421,11 +818,7 @@
     saveHistoryList(list);
     renderHistory();
   }
-  function badgeClass(status) {
-    if (status === 'success') return 'badge-success';
-    if (status === 'warning') return 'badge-warning';
-    return 'badge-error';
-  }
+  function badgeClass(status) { return status === 'success' ? 'badge-success' : status === 'warning' ? 'badge-warning' : 'badge-error'; }
   function badgeLabel(entry) {
     if (entry.status === 'success') return 'present';
     if (entry.status === 'warning') return entry.queued ? 'queued' : 'dup';
@@ -434,80 +827,54 @@
   function renderHistory() {
     const list = getHistory();
     historyList.innerHTML = '';
+    localHistoryCard.classList.toggle('hidden', list.length === 0 && getAdmin() === null);
+    if (getAdmin()) localHistoryCard.classList.remove('hidden');
     emptyHistory.classList.toggle('hidden', list.length > 0);
     list.forEach(function (entry) {
       const row = document.createElement('div');
       row.className = 'history-item';
-      const main = document.createElement('div');
-      main.className = 'history-main';
-      const text = document.createElement('div');
-      text.className = 'history-text';
-      text.textContent = entry.message;
-      const meta = document.createElement('div');
-      meta.className = 'history-meta';
-      meta.textContent = entry.time + ' · Session ' + entry.session;
-      main.appendChild(text); main.appendChild(meta);
-      const badge = document.createElement('span');
-      badge.className = 'badge ' + badgeClass(entry.status);
-      badge.textContent = badgeLabel(entry);
-      row.appendChild(main); row.appendChild(badge);
+      row.innerHTML =
+        '<div class="history-main"><div class="history-text">' + escapeHtml(entry.message) + '</div>' +
+        '<div class="history-meta">' + entry.time + ' · Session ' + entry.session + '</div></div>' +
+        '<span class="badge ' + badgeClass(entry.status) + '">' + badgeLabel(entry) + '</span>';
       historyList.appendChild(row);
     });
   }
   clearHistoryBtn.addEventListener('click', function () {
     if (confirm('Clear local scan history on this device? This does not affect the spreadsheet.')) {
-      saveHistoryList([]);
-      renderHistory();
+      saveHistoryList([]); renderHistory();
     }
   });
 
-  // ---- Server-side scan log ----
   loadLogBtn.addEventListener('click', function () {
-    loadLogBtn.disabled = true;
-    loadLogBtn.textContent = 'Loading...';
+    loadLogBtn.disabled = true; loadLogBtn.textContent = 'Loading...';
     const filters = {
-      session: filterSession.value,
-      status: filterStatus.value,
-      admin: filterAdmin.value.trim(),
-      studentId: filterStudent.value.trim()
+      session: filterSession.value, status: filterStatus.value,
+      admin: filterAdmin.value.trim(), studentId: filterStudent.value.trim()
     };
-    apiCall({ action: 'getLogs', filters: filters })
-      .then(function (res) {
-        loadLogBtn.disabled = false;
-        loadLogBtn.textContent = 'Load Log';
-        logList.innerHTML = '';
-        if (!res.ok) { emptyLog.textContent = res.message || 'Could not load log.'; emptyLog.classList.remove('hidden'); logMeta.textContent = ''; return; }
-        emptyLog.classList.toggle('hidden', res.logs.length > 0);
-        emptyLog.textContent = 'No matching scans.';
-        res.logs.forEach(function (log) {
-          const row = document.createElement('div');
-          row.className = 'history-item';
-          const main = document.createElement('div');
-          main.className = 'history-main';
-          const text = document.createElement('div');
-          text.className = 'history-text';
-          text.textContent = (log.name || log.id) + ' (' + log.id + ') — by ' + log.admin;
-          const meta = document.createElement('div');
-          meta.className = 'history-meta';
-          meta.textContent = log.time + ' · Session ' + log.session;
-          main.appendChild(text); main.appendChild(meta);
-          const badge = document.createElement('span');
-          const cls = log.status === 'Present' ? 'badge-success' : (log.status === 'Already Present' ? 'badge-warning' : 'badge-error');
-          badge.className = 'badge ' + cls;
-          badge.textContent = log.status.toLowerCase();
-          row.appendChild(main); row.appendChild(badge);
-          logList.appendChild(row);
-        });
-        logMeta.textContent = 'Showing ' + res.logs.length + ' of ' + res.total + ' matching scan(s), most recent first.';
-      })
-      .catch(function () {
-        loadLogBtn.disabled = false;
-        loadLogBtn.textContent = 'Load Log';
-        logMeta.textContent = 'Could not reach the server.';
+    apiCall({ action: 'getLogs', filters: filters }).then(function (res) {
+      loadLogBtn.disabled = false; loadLogBtn.textContent = 'Load Log';
+      logList.innerHTML = '';
+      if (!res.ok) { emptyLog.textContent = res.message || 'Could not load log.'; emptyLog.classList.remove('hidden'); logMeta.textContent = ''; return; }
+      emptyLog.classList.toggle('hidden', res.logs.length > 0);
+      emptyLog.textContent = 'No matching scans.';
+      res.logs.forEach(function (log) {
+        const row = document.createElement('div');
+        row.className = 'history-item';
+        const cls = log.status === 'Present' ? 'badge-success' : (log.status === 'Already Present' ? 'badge-warning' : 'badge-error');
+        row.innerHTML =
+          '<div class="history-main"><div class="history-text">' + escapeHtml(log.name || log.id) + ' (' + escapeHtml(log.id) + ') — by ' + escapeHtml(log.admin) + '</div>' +
+          '<div class="history-meta">' + log.time + ' · Session ' + log.session + '</div></div>' +
+          '<span class="badge ' + cls + '">' + log.status.toLowerCase() + '</span>';
+        logList.appendChild(row);
       });
+      logMeta.textContent = 'Showing ' + res.logs.length + ' of ' + res.total + ' matching scan(s), most recent first.';
+    }).catch(function () {
+      loadLogBtn.disabled = false; loadLogBtn.textContent = 'Load Log';
+      logMeta.textContent = 'Could not reach the server.';
+    });
   });
 
-  // ---- Offline queue ----
   function getQueue() { try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch (e) { return []; } }
   function setQueue(q) { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); }
   function queueScan(payload) { const q = getQueue(); q.push(payload); setQueue(q); updateQueueNote(); }
@@ -535,34 +902,24 @@
   setInterval(flushQueue, 8000);
   window.addEventListener('online', flushQueue);
 
-  // ---- Session confirmation flow ----
   confirmBtn.addEventListener('click', function () {
     if (!checkConfigured()) return;
     confirmedSession = sessionSelect.value;
     localStorage.setItem('attendanceLastSession', confirmedSession);
-
     sessionCard.classList.add('hidden');
     activeBanner.classList.remove('hidden');
     scanCard.classList.remove('hidden');
     activeSessionLabel.textContent = 'Session ' + confirmedSession;
-
     presentCount = 0; totalCount = 0;
     counterSpan.textContent = '...';
-    apiCall({ action: 'count', session: confirmedSession })
-      .then(function (res) {
-        if (res.ok) { presentCount = res.present; totalCount = res.total; }
-        counterSpan.textContent = presentCount + ' / ' + totalCount;
-      })
-      .catch(function () { counterSpan.textContent = '–/–'; });
+    apiCall({ action: 'count', session: confirmedSession }).then(function (res) {
+      if (res.ok) { presentCount = res.present; totalCount = res.total; }
+      counterSpan.textContent = presentCount + ' / ' + totalCount;
+    }).catch(function () { counterSpan.textContent = '–/–'; });
   });
 
   changeSessionBtn.addEventListener('click', function () {
-    if (cameraRunning) {
-      html5QrCode.stop().catch(function () {});
-      cameraRunning = false;
-      startBtn.classList.remove('hidden');
-      stopBtn.classList.add('hidden');
-    }
+    if (cameraRunning) { html5QrCode.stop().catch(function () {}); cameraRunning = false; startBtn.classList.remove('hidden'); stopBtn.classList.add('hidden'); }
     confirmedSession = null;
     sessionCard.classList.remove('hidden');
     activeBanner.classList.add('hidden');
@@ -570,13 +927,11 @@
     showResult('idle', 'Waiting to scan...');
   });
 
-  // ---- Scanning ----
   function processCode(decodedText, allowRepeat) {
     const now = Date.now();
     const key = decodedText + '|' + confirmedSession;
     if (!allowRepeat && key === lastCode && (now - lastTime) < 3000) return;
     lastCode = key; lastTime = now;
-
     if (!checkConfigured()) return;
     const admin = getAdmin();
     if (!admin) { showResult('error', 'Not logged in.'); return; }
@@ -585,26 +940,23 @@
     const payload = { id: decodedText, session: confirmedSession, admin: admin.name };
     const timeLabel = new Date().toLocaleTimeString();
 
-    apiCall(payload)
-      .then(function (res) {
-        const cls = res.ok ? (res.alreadyMarked ? 'warning' : 'success') : 'error';
-        showResult(cls, res.message);
-        addHistoryEntry({ time: timeLabel, session: confirmedSession, message: res.message, status: cls, queued: false });
-        if (res.ok && !res.alreadyMarked) { presentCount += 1; counterSpan.textContent = presentCount + ' / ' + totalCount; }
-      })
-      .catch(function () {
-        queueScan(payload);
-        const msg = 'Offline — ID ' + decodedText + ' queued for Session ' + confirmedSession;
-        showResult('warning', msg);
-        addHistoryEntry({ time: timeLabel, session: confirmedSession, message: msg, status: 'warning', queued: true });
-      });
+    apiCall(payload).then(function (res) {
+      const cls = res.ok ? (res.alreadyMarked ? 'warning' : 'success') : 'error';
+      showResult(cls, res.message);
+      addHistoryEntry({ time: timeLabel, session: confirmedSession, message: res.message, status: cls, queued: false });
+      if (res.ok && !res.alreadyMarked) { presentCount += 1; counterSpan.textContent = presentCount + ' / ' + totalCount; }
+    }).catch(function () {
+      queueScan(payload);
+      const msg = 'Offline — ID ' + decodedText + ' queued for Session ' + confirmedSession;
+      showResult('warning', msg);
+      addHistoryEntry({ time: timeLabel, session: confirmedSession, message: msg, status: 'warning', queued: true });
+    });
   }
 
   startBtn.addEventListener('click', function () {
     showResult('idle', 'Requesting camera access...');
     html5QrCode.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: 250 },
+      { facingMode: "environment" }, { fps: 10, qrbox: 250 },
       function (decodedText) { processCode(decodedText, false); }
     ).then(function () {
       cameraRunning = true;
@@ -615,18 +967,14 @@
       showResult('error', 'Camera error: ' + err + ' (try Upload QR Image instead)');
     });
   });
-
   stopBtn.addEventListener('click', function () {
     if (cameraRunning) {
       html5QrCode.stop().then(function () {
-        cameraRunning = false;
-        startBtn.classList.remove('hidden');
-        stopBtn.classList.add('hidden');
+        cameraRunning = false; startBtn.classList.remove('hidden'); stopBtn.classList.add('hidden');
         showResult('idle', 'Camera stopped');
       });
     }
   });
-
   uploadBtn.addEventListener('click', function () { fileInput.click(); });
   fileInput.addEventListener('change', function (e) {
     const file = e.target.files[0];
