@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR Attendance Scanner</title>
+<style>
+  body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background: #f5f5f5; margin: 0; }
+  h2 { color: #333; margin-bottom: 4px; }
+  p.sub { color: #666; margin-top: 0; font-size: 14px; }
+  #reader { width: 320px; max-width: 90vw; margin: 15px auto; border-radius: 8px; overflow: hidden; }
+  button {
+    background: #1a73e8; color: white; border: none; padding: 12px 22px;
+    border-radius: 6px; font-size: 16px; cursor: pointer; margin: 6px;
+  }
+  button:hover { background: #1558b0; }
+  button.secondary { background: #6c757d; }
+  button.secondary:hover { background: #565e64; }
+  #result {
+    margin: 20px auto 0; padding: 15px; border-radius: 8px;
+    font-size: 18px; font-weight: bold; min-height: 30px; max-width: 320px;
+  }
+  .idle { background: #e2e3e5; color: #383d41; }
+  .success { background: #d4edda; color: #155724; }
+  .warning { background: #fff3cd; color: #856404; }
+  .error { background: #f8d7da; color: #721c24; }
+  #fileInput { display: none; }
+  .divider { color: #999; margin: 10px 0; font-size: 13px; }
+  #configBox, #sessionBox { max-width: 340px; margin: 10px auto; text-align: left; }
+  #configBox input, #sessionBox select { width: 100%; padding: 8px; box-sizing: border-box; margin-top: 4px; font-size: 15px; }
+  #configBox label, #sessionBox label { font-size: 13px; color: #555; }
+</style>
+</head>
+<body>
+  <h2>QR Attendance Scanner</h2>
+  <p class="sub">Set the session, then scan student QR codes</p>
+
+  <div id="configBox">
+    <label for="scriptUrl">Apps Script Web App URL (paste once, saved in this browser):</label>
+    <input type="text" id="scriptUrl" placeholder="https://script.google.com/macros/s/XXXX/exec">
+  </div>
+
+  <div id="sessionBox">
+    <label for="sessionSelect">Session:</label>
+    <select id="sessionSelect">
+      <option value="1">Session 1</option>
+      <option value="2">Session 2</option>
+      <option value="3">Session 3</option>
+      <option value="4">Session 4</option>
+      <option value="5">Session 5</option>
+      <option value="6">Session 6</option>
+      <option value="7">Session 7</option>
+      <option value="8">Session 8</option>
+      <option value="9">Session 9</option>
+      <option value="10">Session 10</option>
+    </select>
+  </div>
+
+  <div>
+    <button id="startBtn">📷 Start Camera</button>
+    <button id="stopBtn" class="secondary" style="display:none;">⏹ Stop Camera</button>
+  </div>
+
+  <div id="reader"></div>
+
+  <div class="divider">— or —</div>
+  <button id="uploadBtn" class="secondary">🖼 Upload QR Image</button>
+  <input type="file" id="fileInput" accept="image/*">
+
+  <div id="result" class="idle">Waiting to scan...</div>
+
+  <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
+  <script>
+    const resultDiv = document.getElementById('result');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const fileInput = document.getElementById('fileInput');
+    const scriptUrlInput = document.getElementById('scriptUrl');
+    const sessionSelect = document.getElementById('sessionSelect');
+
+    // Remember the Apps Script URL and last-used session in this browser
+    scriptUrlInput.value = localStorage.getItem('attendanceScriptUrl') || '';
+    scriptUrlInput.addEventListener('change', function () {
+      localStorage.setItem('attendanceScriptUrl', scriptUrlInput.value.trim());
+    });
+    sessionSelect.value = localStorage.getItem('attendanceLastSession') || '1';
+    sessionSelect.addEventListener('change', function () {
+      localStorage.setItem('attendanceLastSession', sessionSelect.value);
+    });
+
+    let lastCode = '';
+    let lastTime = 0;
+    const html5QrCode = new Html5Qrcode("reader");
+    let cameraRunning = false;
+
+    function showResult(cls, text) {
+      resultDiv.className = cls;
+      resultDiv.textContent = text;
+    }
+
+    function processCode(decodedText, allowRepeat) {
+      const now = Date.now();
+      // decodedText is just the Student ID now (one QR per student)
+      const key = decodedText + '|' + sessionSelect.value;
+      if (!allowRepeat && key === lastCode && (now - lastTime) < 3000) return;
+      lastCode = key;
+      lastTime = now;
+
+      const scriptUrl = scriptUrlInput.value.trim();
+      if (!scriptUrl) {
+        showResult('error', 'Paste your Apps Script Web App URL above first.');
+        return;
+      }
+
+      showResult('idle', 'Checking...');
+
+      fetch(scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids CORS preflight
+        body: JSON.stringify({ id: decodedText, session: sessionSelect.value })
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (res) {
+          showResult(res.ok ? (res.alreadyMarked ? 'warning' : 'success') : 'error', res.message);
+        })
+        .catch(function (err) {
+          showResult('error', 'Could not reach the sheet: ' + err.message);
+        });
+    }
+
+    startBtn.addEventListener('click', function () {
+      showResult('idle', 'Requesting camera access...');
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        function (decodedText) { processCode(decodedText, false); }
+      ).then(function () {
+        cameraRunning = true;
+        startBtn.style.display = 'none';
+        stopBtn.style.display = 'inline-block';
+        showResult('idle', 'Point camera at a student QR code');
+      }).catch(function (err) {
+        showResult('error', 'Camera error: ' + err + ' (try Upload QR Image instead)');
+      });
+    });
+
+    stopBtn.addEventListener('click', function () {
+      if (cameraRunning) {
+        html5QrCode.stop().then(function () {
+          cameraRunning = false;
+          startBtn.style.display = 'inline-block';
+          stopBtn.style.display = 'none';
+          showResult('idle', 'Camera stopped');
+        });
+      }
+    });
+
+    uploadBtn.addEventListener('click', function () { fileInput.click(); });
+
+    fileInput.addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      showResult('idle', 'Reading image...');
+      html5QrCode.scanFile(file, true)
+        .then(function (decodedText) { processCode(decodedText, true); })
+        .catch(function (err) { showResult('error', 'Could not read QR from image: ' + err); });
+    });
+  </script>
+</body>
+</html>
