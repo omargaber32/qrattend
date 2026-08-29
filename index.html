@@ -180,16 +180,16 @@
   }
   .session-pill:hover { transform: scale(1.08); }
   .session-pill.present { background: var(--accent-dim); color: var(--accent-bright); border: 1px solid var(--border-bright); }
-  .session-pill.excused { background: rgba(88,166,255,0.12); color: #79c0ff; border: 1px solid rgba(88,166,255,0.35); }
+  .session-pill.excused { background: var(--warning-dim); color: var(--warning); border: 1px solid rgba(210,153,34,0.35); }
   .session-pill.absent { background: var(--bg-secondary); color: var(--text-dim); border: 1px solid var(--border); }
 
   .status-choice { flex: 1; }
   .status-choice.chosen-present { border-color: var(--border-bright); color: var(--accent-bright); }
-  .status-choice.chosen-excused { border-color: rgba(88,166,255,0.4); color: #79c0ff; }
+  .status-choice.chosen-excused { border-color: rgba(210,153,34,0.4); color: var(--warning); }
   .status-choice.chosen-absent { border-color: var(--border); color: var(--text-dim); }
 
   /* ---- Modal (add student) ---- */
-  #modalOverlay, #deleteOverlay, #statusEditOverlay {
+  #modalOverlay, #deleteOverlay, #statusEditOverlay, #excuseConfirmOverlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200;
     display: flex; align-items: flex-end; justify-content: center;
   }
@@ -235,7 +235,7 @@
   .badge-success { background: var(--accent-dim); color: var(--accent-bright); }
   .badge-warning { background: var(--warning-dim); color: var(--warning); }
   .badge-error { background: var(--danger-dim); color: var(--danger); }
-  .badge-excused { background: rgba(88,166,255,0.12); color: #79c0ff; }
+  .badge-excused { background: var(--warning-dim); color: var(--warning); }
   #emptyHistory, #emptyLog, #emptyStudents { color: var(--text-dim); font-size: 13px; text-align: center; padding: 10px 0; }
   #logMeta { font-size: 11px; color: var(--text-dim); margin-top: 10px; text-align: center; }
 
@@ -543,7 +543,7 @@
 <div id="excuseConfirmOverlay" class="hidden">
   <div id="modalCard">
     <h3>Confirm Excuse</h3>
-    <p style="color:var(--text-secondary); font-size:13px;">This will mark the following ID(s) as <b style="color:#79c0ff;">Excused</b> for <b id="excuseSessionLabel" class="mono">Session -</b>:</p>
+    <p style="color:var(--text-secondary); font-size:13px;">This will mark the following ID(s) as <b style="color:var(--warning);">Excused</b> for <b id="excuseSessionLabel" class="mono">Session -</b>:</p>
     <div id="excuseIdsList" class="mono" style="font-size:13px; color:var(--text-primary); margin:10px 0; word-break:break-word; background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px; padding:10px;"></div>
     <div class="btn-row">
       <button class="btn-secondary" id="excuseCancelBtn">Cancel</button>
@@ -557,10 +557,10 @@
   // ============================================================
   // CONFIG — paste your Apps Script Web App URL here (ends in /exec)
   // ============================================================
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxzlAyGsxKYDAfH4u2vR2b98yVCBq35N8zPBAQFjDmxqvmw1Sylj15Lh6pLVgUB98sk/exec";
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwelxQKKfpwWClDFRY3Wi1Mx51176qi2TXtObMsJGy6wqyQ1OVgpvEc3aD0gEbgzF0G/exec";
   // ============================================================
 
-  const SESSIONS = 14;
+  const SESSIONS = 16;
   const QUEUE_KEY = 'attendanceOfflineQueue';
   const HISTORY_KEY = 'attendanceScanHistory';
   const HISTORY_LIMIT = 50;
@@ -1481,7 +1481,11 @@
         return apiCall({ action: 'setStatus', id: id, session: confirmedSession, status: 'Excused', admin: admin.name, via: 'Bulk Excuse' })
           .then(function (res) {
             const cls = res.ok ? (res.alreadySame ? 'warning' : 'success') : 'error';
-            addHistoryEntry({ time: timeLabel, session: confirmedSession, message: res.message, status: cls, queued: false });
+            // Local "Recent Scans" (this device) intentionally shows this as a normal
+            // present-mark — the true "Excused" status is still recorded server-side
+            // and visible in the Attendance Log.
+            const localMessage = res.ok ? res.message.replace(/Excused/g, 'Present') : res.message;
+            addHistoryEntry({ time: timeLabel, session: confirmedSession, message: localMessage, status: cls, queued: false });
             if (res.ok && !res.alreadySame) successCount++;
             else if (res.ok) alreadyCount++;
             else errorCount++;
