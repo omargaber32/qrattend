@@ -721,7 +721,8 @@
     bottomNav.classList.remove('hidden');
     greetName.textContent = admin.name;
     renderHistory();
-    switchTab('main');
+    switchTab('main');       // this also triggers fetchDashboardData() for Main/Sessions
+    fetchStudentsData();     // prefetch Students tab in the background so it's warm too
   }
   function showLoggedOutUI() {
     topBar.classList.add('hidden');
@@ -765,14 +766,24 @@
   // BOTTOM NAV / TAB SWITCHING
   // ============================================================
   function switchTab(name) {
+    activeTab = name;
     document.querySelectorAll('.tab-content').forEach(function (el) { el.classList.remove('active'); });
     document.getElementById('tab-' + name).classList.add('active');
     document.querySelectorAll('.nav-btn').forEach(function (btn) {
       btn.classList.toggle('active', btn.dataset.tab === name);
     });
-    if (name === 'main') loadDashboard();
-    if (name === 'sessions') loadSessionsList();
-    if (name === 'students') loadStudentsList();
+    if (name === 'main') {
+      if (dashboardData) renderMainDashboard(); else showMainLoading();
+      fetchDashboardData();
+    }
+    if (name === 'sessions') {
+      if (dashboardData) renderSessionsList(); else sessionsList.innerHTML = '<div class="loading-text">Loading sessions...</div>';
+      fetchDashboardData();
+    }
+    if (name === 'students') {
+      if (studentsData !== null) renderStudentsList(); else studentsList.innerHTML = '<div class="loading-text">Loading students...</div>';
+      fetchStudentsData();
+    }
   }
   document.querySelectorAll('.nav-btn').forEach(function (btn) {
     btn.addEventListener('click', function () { switchTab(btn.dataset.tab); });
@@ -780,62 +791,76 @@
 
   // ============================================================
   // MAIN TAB — dashboard
+  // (Shares its data with the Sessions tab — both come from "getDashboard".
+  //  Cached in dashboardData: switching tabs paints instantly from cache, then
+  //  a background refresh silently updates the view when fresh data arrives.)
   // ============================================================
-  function loadDashboard() {
+  let activeTab = 'main';
+  let dashboardData = null;   // cached getDashboard() response
+  let studentsData = null;    // cached getStudentsList() response; null = not yet loaded
+
+  function showMainLoading() {
     kpiTotalStudents.textContent = '…';
     kpiMostSession.textContent = '…';
     chartWrap.innerHTML = '<div class="loading-text">Loading chart...</div>';
-    apiCall({ action: 'getDashboard' }).then(function (res) {
-      if (!res.ok) { chartWrap.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>'; return; }
-      kpiTotalStudents.textContent = res.totalStudents;
-      kpiMostSession.textContent = res.mostAttendedSession.count > 0
-        ? 'S' + res.mostAttendedSession.session + ' (' + res.mostAttendedSession.count + ')'
-        : '—';
+  }
 
-      const maxCount = Math.max.apply(null, res.sessionCounts.map(function (s) { return s.count; }).concat([1]));
-      chartWrap.innerHTML = '';
-      res.sessionCounts.forEach(function (sc) {
-        const col = document.createElement('div');
-        col.className = 'bar-col';
-        const countLabel = document.createElement('div');
-        countLabel.className = 'bar-count';
-        countLabel.textContent = sc.count;
-        const bar = document.createElement('div');
-        bar.className = 'bar';
-        bar.style.height = Math.max(2, (sc.count / maxCount) * 100) + '%';
-        const label = document.createElement('div');
-        label.className = 'bar-label';
-        label.textContent = sc.session;
-        col.appendChild(countLabel);
-        col.appendChild(bar);
-        col.appendChild(label);
-        chartWrap.appendChild(col);
-      });
+  function fetchDashboardData() {
+    return apiCall({ action: 'getDashboard' }).then(function (res) {
+      if (!res.ok) {
+        if (!dashboardData) {
+          if (activeTab === 'main') chartWrap.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>';
+          if (activeTab === 'sessions') sessionsList.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>';
+        }
+        return;
+      }
+      dashboardData = res;
+      if (activeTab === 'main') renderMainDashboard();
+      if (activeTab === 'sessions') renderSessionsList();
     }).catch(function () {
-      chartWrap.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
+      if (!dashboardData) {
+        if (activeTab === 'main') chartWrap.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
+        if (activeTab === 'sessions') sessionsList.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
+      }
+    });
+  }
+
+  function renderMainDashboard() {
+    if (!dashboardData) return;
+    const res = dashboardData;
+    kpiTotalStudents.textContent = res.totalStudents;
+    kpiMostSession.textContent = res.mostAttendedSession.count > 0
+      ? 'S' + res.mostAttendedSession.session + ' (' + res.mostAttendedSession.count + ')'
+      : '—';
+
+    const maxCount = Math.max.apply(null, res.sessionCounts.map(function (s) { return s.count; }).concat([1]));
+    chartWrap.innerHTML = '';
+    res.sessionCounts.forEach(function (sc) {
+      const col = document.createElement('div');
+      col.className = 'bar-col';
+      const countLabel = document.createElement('div');
+      countLabel.className = 'bar-count';
+      countLabel.textContent = sc.count;
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      bar.style.height = Math.max(2, (sc.count / maxCount) * 100) + '%';
+      const label = document.createElement('div');
+      label.className = 'bar-label';
+      label.textContent = sc.session;
+      col.appendChild(countLabel);
+      col.appendChild(bar);
+      col.appendChild(label);
+      chartWrap.appendChild(col);
     });
   }
 
   // ============================================================
-  // SESSIONS TAB
+  // SESSIONS TAB (reads from the same dashboardData cache as Main)
   // ============================================================
-  let lastSessionsData = null; // { totalStudents, sessionCounts } cached for client-side sorting
-
-  function loadSessionsList() {
-    sessionsList.innerHTML = '<div class="loading-text">Loading sessions...</div>';
-    apiCall({ action: 'getDashboard' }).then(function (res) {
-      if (!res.ok) { sessionsList.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>'; return; }
-      lastSessionsData = res;
-      renderSessionsList();
-    }).catch(function () {
-      sessionsList.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
-    });
-  }
-
   function renderSessionsList() {
-    if (!lastSessionsData) return;
+    if (!dashboardData) return;
     const sortMode = sessionSortSelect.value;
-    let counts = lastSessionsData.sessionCounts.slice();
+    let counts = dashboardData.sessionCounts.slice();
     if (sortMode === 'desc') counts.sort(function (a, b) { return b.count - a.count; });
     else if (sortMode === 'asc') counts.sort(function (a, b) { return a.count - b.count; });
     else counts.sort(function (a, b) { return a.session - b.session; });
@@ -846,7 +871,7 @@
       card.className = 'list-card';
       card.innerHTML =
         '<div><div class="title">Session ' + sc.session + '</div>' +
-        '<div class="subtitle">attended: ' + sc.count + ' / ' + lastSessionsData.totalStudents + '</div></div>' +
+        '<div class="subtitle">attended: ' + sc.count + ' / ' + dashboardData.totalStudents + '</div></div>' +
         '<div style="display:flex;align-items:center;"><span class="stat">' + sc.count + '</span><span class="chevron">›</span></div>';
       card.addEventListener('click', function () { openSessionDetail(sc.session); });
       sessionsList.appendChild(card);
@@ -883,23 +908,23 @@
   // ============================================================
   // STUDENTS TAB
   // ============================================================
-  let allStudentsData = []; // cached full list for client-side search/sort
-
-  function loadStudentsList() {
-    studentsList.innerHTML = '<div class="loading-text">Loading students...</div>';
-    emptyStudents.classList.add('hidden');
-    apiCall({ action: 'getStudentsList' }).then(function (res) {
-      if (!res.ok) { studentsList.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>'; return; }
-      allStudentsData = res.students;
-      renderStudentsList();
+  function fetchStudentsData() {
+    return apiCall({ action: 'getStudentsList' }).then(function (res) {
+      if (!res.ok) {
+        if (studentsData === null) studentsList.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>';
+        return;
+      }
+      studentsData = res.students;
+      if (activeTab === 'students') renderStudentsList();
     }).catch(function () {
-      studentsList.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
+      if (studentsData === null) studentsList.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
     });
   }
 
   function renderStudentsList() {
+    if (studentsData === null) return;
     const query = studentSearchInput.value.trim().toLowerCase();
-    let list = allStudentsData.filter(function (s) {
+    let list = studentsData.filter(function (s) {
       if (!query) return true;
       return String(s.name || '').toLowerCase().indexOf(query) !== -1 ||
              String(s.id || '').toLowerCase().indexOf(query) !== -1;
@@ -912,7 +937,7 @@
     else if (sortMode === 'attend-asc') list.sort(function (a, b) { return a.attendedCount - b.attendedCount; });
 
     studentsList.innerHTML = '';
-    if (allStudentsData.length === 0) { emptyStudents.textContent = 'No students yet.'; emptyStudents.classList.remove('hidden'); return; }
+    if (studentsData.length === 0) { emptyStudents.textContent = 'No students yet.'; emptyStudents.classList.remove('hidden'); return; }
     if (list.length === 0) { emptyStudents.textContent = 'No students match your search.'; emptyStudents.classList.remove('hidden'); return; }
     emptyStudents.classList.add('hidden');
 
@@ -1037,7 +1062,8 @@
         }
         deleteOverlay.classList.add('hidden');
         detailOverlay.classList.add('hidden');
-        loadStudentsList();
+        fetchStudentsData();  // refresh cache so the students list reflects the deletion
+        dashboardData = null; // counts changed too — force a fresh fetch next time Main/Sessions is viewed
       })
       .catch(function () {
         deleteError.textContent = 'Could not reach the server.';
@@ -1075,7 +1101,8 @@
         submitAddStudent.textContent = 'Add Student';
         if (!res.ok) { addStudentError.textContent = res.message || 'Could not add student.'; return; }
         modalOverlay.classList.add('hidden');
-        loadStudentsList();
+        fetchStudentsData();  // refresh cache so the new student shows up
+        dashboardData = null; // total student count changed — force a fresh fetch
         downloadStudentCardPDF(res);
       })
       .catch(function () {
@@ -1214,9 +1241,16 @@
     saveHistoryList(list);
     renderHistory();
   }
-  function badgeClass(status) { return status === 'success' ? 'badge-success' : status === 'warning' ? 'badge-warning' : 'badge-error'; }
+  function badgeClass(status) {
+    if (status === 'success') return 'badge-success';
+    if (status === 'excused' || status === 'excused-dup') return 'badge-excused';
+    if (status === 'warning') return 'badge-warning';
+    return 'badge-error';
+  }
   function badgeLabel(entry) {
     if (entry.status === 'success') return 'present';
+    if (entry.status === 'excused') return 'excused';
+    if (entry.status === 'excused-dup') return 'dup';
     if (entry.status === 'warning') return entry.queued ? 'queued' : 'dup';
     return 'error';
   }
@@ -1327,6 +1361,11 @@
     showResult('idle', 'Waiting to scan...');
   });
 
+  function invalidateAttendanceCaches() {
+    dashboardData = null;
+    studentsData = null;
+  }
+
   function processCode(decodedText, allowRepeat) {
     const now = Date.now();
     const key = decodedText + '|' + confirmedSession;
@@ -1344,7 +1383,10 @@
       const cls = res.ok ? (res.alreadyMarked ? 'warning' : 'success') : 'error';
       showResult(cls, res.message);
       addHistoryEntry({ time: timeLabel, session: confirmedSession, message: res.message, status: cls, queued: false });
-      if (res.ok && !res.alreadyMarked) { presentCount += 1; counterSpan.textContent = presentCount + ' / ' + totalCount; }
+      if (res.ok && !res.alreadyMarked) {
+        presentCount += 1; counterSpan.textContent = presentCount + ' / ' + totalCount;
+        invalidateAttendanceCaches();
+      }
     }).catch(function () {
       queueScan(payload);
       const msg = 'Offline — ID ' + decodedText + ' queued for Session ' + confirmedSession;
@@ -1414,6 +1456,7 @@
             addHistoryEntry({ time: timeLabel, session: confirmedSession, message: res.message, status: cls, queued: false });
             if (res.ok && !res.alreadyMarked) {
               successCount++; presentCount += 1; counterSpan.textContent = presentCount + ' / ' + totalCount;
+              invalidateAttendanceCaches();
             } else if (res.ok && res.alreadyMarked) {
               dupCount++;
             } else {
@@ -1480,13 +1523,10 @@
         const timeLabel = new Date().toLocaleTimeString();
         return apiCall({ action: 'setStatus', id: id, session: confirmedSession, status: 'Excused', admin: admin.name, via: 'Bulk Excuse' })
           .then(function (res) {
-            const cls = res.ok ? (res.alreadySame ? 'warning' : 'success') : 'error';
-            // Local "Recent Scans" (this device) intentionally shows this as a normal
-            // present-mark — the true "Excused" status is still recorded server-side
-            // and visible in the Attendance Log.
-            const localMessage = res.ok ? res.message.replace(/Excused/g, 'Present') : res.message;
-            addHistoryEntry({ time: timeLabel, session: confirmedSession, message: localMessage, status: cls, queued: false });
-            if (res.ok && !res.alreadySame) successCount++;
+            // Shown truthfully as "excused" in Recent Scans — not masked as present.
+            const cls = res.ok ? (res.alreadySame ? 'excused-dup' : 'excused') : 'error';
+            addHistoryEntry({ time: timeLabel, session: confirmedSession, message: res.message, status: cls, queued: false });
+            if (res.ok && !res.alreadySame) { successCount++; invalidateAttendanceCaches(); }
             else if (res.ok) alreadyCount++;
             else errorCount++;
           })
@@ -1552,6 +1592,7 @@
       statusConfirmBtn.disabled = false;
       statusConfirmBtn.textContent = 'Confirm';
       if (!res.ok) { alert(res.message || 'Could not update.'); return; }
+      invalidateAttendanceCaches();
       statusEditOverlay.classList.add('hidden');
       openStudentDetail(pendingStatusEdit.id); // refresh detail view to show the updated pill
     }).catch(function () {
