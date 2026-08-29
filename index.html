@@ -175,13 +175,21 @@
   .session-pill {
     display: inline-flex; align-items: center; justify-content: center;
     width: 30px; height: 30px; border-radius: 6px; font-size: 11px; font-weight: 700;
-    font-family: 'JetBrains Mono', monospace; margin: 3px;
+    font-family: 'JetBrains Mono', monospace; margin: 3px; padding: 0; cursor: pointer;
+    appearance: none; -webkit-appearance: none; transition: transform 0.1s ease;
   }
+  .session-pill:hover { transform: scale(1.08); }
   .session-pill.present { background: var(--accent-dim); color: var(--accent-bright); border: 1px solid var(--border-bright); }
+  .session-pill.excused { background: rgba(88,166,255,0.12); color: #79c0ff; border: 1px solid rgba(88,166,255,0.35); }
   .session-pill.absent { background: var(--bg-secondary); color: var(--text-dim); border: 1px solid var(--border); }
 
+  .status-choice { flex: 1; }
+  .status-choice.chosen-present { border-color: var(--border-bright); color: var(--accent-bright); }
+  .status-choice.chosen-excused { border-color: rgba(88,166,255,0.4); color: #79c0ff; }
+  .status-choice.chosen-absent { border-color: var(--border); color: var(--text-dim); }
+
   /* ---- Modal (add student) ---- */
-  #modalOverlay, #deleteOverlay {
+  #modalOverlay, #deleteOverlay, #statusEditOverlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200;
     display: flex; align-items: flex-end; justify-content: center;
   }
@@ -227,6 +235,7 @@
   .badge-success { background: var(--accent-dim); color: var(--accent-bright); }
   .badge-warning { background: var(--warning-dim); color: var(--warning); }
   .badge-error { background: var(--danger-dim); color: var(--danger); }
+  .badge-excused { background: rgba(88,166,255,0.12); color: #79c0ff; }
   #emptyHistory, #emptyLog, #emptyStudents { color: var(--text-dim); font-size: 13px; text-align: center; padding: 10px 0; }
   #logMeta { font-size: 11px; color: var(--text-dim); margin-top: 10px; text-align: center; }
 
@@ -318,6 +327,17 @@
         <input type="text" id="manualIdsInput" placeholder="e.g. S001, S002, S003">
       </div>
       <button id="manualSubmitBtn" class="btn-secondary" style="width:100%;">Mark Present</button>
+
+      <div class="divider">or</div>
+      <button id="excuseToggleBtn" class="btn-secondary" style="width:100%;">Excuse Student(s)</button>
+      <div id="excuseSection" class="hidden" style="margin-top:10px;">
+        <div class="field">
+          <label for="excuseIdsInput">Enter Student ID(s) to excuse (comma-separated)</label>
+          <input type="text" id="excuseIdsInput" placeholder="e.g. S001, S002">
+        </div>
+        <button id="excusePreviewBtn" class="btn-secondary" style="width:100%;">Review &amp; Confirm</button>
+      </div>
+
       <div id="result" class="idle">Waiting to scan...</div>
       <div id="queueNote" class="hidden"></div>
     </div>
@@ -343,7 +363,8 @@
           <select id="filterStatus">
             <option value="">All</option>
             <option value="Present">Present</option>
-            <option value="Already Present">Already Present</option>
+            <option value="Excused">Excused</option>
+            <option value="Absent">Absent (manual edits)</option>
             <option value="Not Found">Not Found</option>
           </select>
         </div>
@@ -494,12 +515,49 @@
   </div>
 </div>
 
+<!-- Per-session status edit modal (Present / Excused / Absent) -->
+<div id="statusEditOverlay" class="hidden">
+  <div id="modalCard">
+    <div id="statusSelectSection">
+      <h3>Update Attendance</h3>
+      <p style="color:var(--text-secondary); font-size:13px;">Session <b id="statusSessionLabel" class="mono">-</b> for <b id="statusStudentLabel">-</b></p>
+      <div class="btn-row" style="margin-top:12px;">
+        <button class="btn-secondary status-choice" data-status="Present">Present</button>
+        <button class="btn-secondary status-choice" data-status="Excused">Excused</button>
+        <button class="btn-secondary status-choice" data-status="Absent">Absent</button>
+      </div>
+      <div class="btn-row"><button class="btn-secondary" id="statusCancelBtn" style="width:100%;">Cancel</button></div>
+    </div>
+    <div id="statusConfirmSection" class="hidden">
+      <h3>Confirm Change</h3>
+      <p style="color:var(--text-secondary); font-size:14px;" id="statusConfirmText">-</p>
+      <div class="btn-row">
+        <button class="btn-secondary" id="statusBackBtn">Back</button>
+        <button class="btn-primary" id="statusConfirmBtn">Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk excuse confirmation (Scan tab) -->
+<div id="excuseConfirmOverlay" class="hidden">
+  <div id="modalCard">
+    <h3>Confirm Excuse</h3>
+    <p style="color:var(--text-secondary); font-size:13px;">This will mark the following ID(s) as <b style="color:#79c0ff;">Excused</b> for <b id="excuseSessionLabel" class="mono">Session -</b>:</p>
+    <div id="excuseIdsList" class="mono" style="font-size:13px; color:var(--text-primary); margin:10px 0; word-break:break-word; background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px; padding:10px;"></div>
+    <div class="btn-row">
+      <button class="btn-secondary" id="excuseCancelBtn">Cancel</button>
+      <button class="btn-primary" id="excuseConfirmBtn">Confirm Excuse</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
 <script>
   // ============================================================
   // CONFIG — paste your Apps Script Web App URL here (ends in /exec)
   // ============================================================
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwWyoWEpxNCncKsNlNbQYD_ZYIC1s3Pagq1M35QpOBxSn9q7Y_k7z6secoUzyB2HZu8/exec";
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxzlAyGsxKYDAfH4u2vR2b98yVCBq35N8zPBAQFjDmxqvmw1Sylj15Lh6pLVgUB98sk/exec";
   // ============================================================
 
   const SESSIONS = 14;
@@ -534,6 +592,25 @@
   const fileInput = document.getElementById('fileInput');
   const manualIdsInput = document.getElementById('manualIdsInput');
   const manualSubmitBtn = document.getElementById('manualSubmitBtn');
+  const excuseToggleBtn = document.getElementById('excuseToggleBtn');
+  const excuseSection = document.getElementById('excuseSection');
+  const excuseIdsInput = document.getElementById('excuseIdsInput');
+  const excusePreviewBtn = document.getElementById('excusePreviewBtn');
+  const excuseConfirmOverlay = document.getElementById('excuseConfirmOverlay');
+  const excuseSessionLabel = document.getElementById('excuseSessionLabel');
+  const excuseIdsList = document.getElementById('excuseIdsList');
+  const excuseCancelBtn = document.getElementById('excuseCancelBtn');
+  const excuseConfirmBtn = document.getElementById('excuseConfirmBtn');
+
+  const statusEditOverlay = document.getElementById('statusEditOverlay');
+  const statusSelectSection = document.getElementById('statusSelectSection');
+  const statusConfirmSection = document.getElementById('statusConfirmSection');
+  const statusSessionLabel = document.getElementById('statusSessionLabel');
+  const statusStudentLabel = document.getElementById('statusStudentLabel');
+  const statusConfirmText = document.getElementById('statusConfirmText');
+  const statusCancelBtn = document.getElementById('statusCancelBtn');
+  const statusBackBtn = document.getElementById('statusBackBtn');
+  const statusConfirmBtn = document.getElementById('statusConfirmBtn');
   const resultDiv = document.getElementById('result');
   const queueNote = document.getElementById('queueNote');
   const localHistoryCard = document.getElementById('localHistoryCard');
@@ -878,9 +955,10 @@
         '<div class="info-row"><span class="k">Phone</span>' + phoneCell + '</div>' +
         '<div class="info-row"><span class="k">Email</span>' + emailCell + '</div>' +
         '</div>';
-      html += '<div class="card"><p class="card-title">Sessions Attended</p><div>';
+      html += '<div class="card"><p class="card-title">Sessions Attended <span style="color:var(--text-dim); font-weight:400; text-transform:none; letter-spacing:normal;">(tap to edit)</span></p><div>';
       res.sessions.forEach(function (sess) {
-        html += '<span class="session-pill ' + (sess.present ? 'present' : 'absent') + '" title="Session ' + sess.session + (sess.time ? ' — ' + sess.time : '') + '">' + sess.session + '</span>';
+        const cls = sess.status === 'Present' ? 'present' : sess.status === 'Excused' ? 'excused' : 'absent';
+        html += '<button type="button" class="session-pill ' + cls + '" data-session="' + sess.session + '" title="Session ' + sess.session + ' — ' + sess.status + (sess.time ? ' (' + sess.time + ')' : '') + '">' + sess.session + '</button>';
       });
       html += '</div></div>';
       html += '<div class="btn-row">' +
@@ -913,6 +991,11 @@
           } else {
             alert('Could not copy automatically — value: ' + value);
           }
+        });
+      });
+      detailContent.querySelectorAll('.session-pill').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          openStatusEdit(s.id, s.name || s.id, btn.dataset.session);
         });
       });
     }).catch(function () {
@@ -1174,7 +1257,11 @@
       res.logs.forEach(function (log) {
         const row = document.createElement('div');
         row.className = 'history-item';
-        const cls = log.status === 'Present' ? 'badge-success' : (log.status === 'Already Present' ? 'badge-warning' : 'badge-error');
+        const st = log.status.toLowerCase();
+        let cls = 'badge-error';
+        if (st.indexOf('present') !== -1) cls = st.indexOf('already') !== -1 ? 'badge-warning' : 'badge-success';
+        else if (st.indexOf('excused') !== -1) cls = 'badge-excused';
+        else if (st.indexOf('absent') !== -1) cls = 'badge-warning';
         row.innerHTML =
           '<div class="history-main"><div class="history-text">' + escapeHtml(log.name || log.id) + ' (' + escapeHtml(log.id) + ') — by ' + escapeHtml(log.admin) + '</div>' +
           '<div class="history-meta">' + log.time + ' · Session ' + log.session + '</div></div>' +
@@ -1353,6 +1440,121 @@
   manualSubmitBtn.addEventListener('click', processManualIds);
   manualIdsInput.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') processManualIds();
+  });
+
+  // ---- Bulk excuse (Scan tab) ----
+  let pendingExcuseIds = [];
+
+  excuseToggleBtn.addEventListener('click', function () {
+    excuseSection.classList.toggle('hidden');
+  });
+
+  excusePreviewBtn.addEventListener('click', function () {
+    if (!confirmedSession) { showResult('error', 'Confirm a session first.'); return; }
+    const ids = excuseIdsInput.value.split(',')
+      .map(function (s) { return s.trim(); })
+      .filter(function (s) { return s.length > 0; });
+    if (ids.length === 0) return;
+
+    pendingExcuseIds = ids;
+    excuseSessionLabel.textContent = 'Session ' + confirmedSession;
+    excuseIdsList.textContent = ids.join(', ');
+    excuseConfirmOverlay.classList.remove('hidden');
+  });
+
+  excuseCancelBtn.addEventListener('click', function () { excuseConfirmOverlay.classList.add('hidden'); });
+
+  excuseConfirmBtn.addEventListener('click', function () {
+    if (!checkConfigured()) return;
+    const admin = getAdmin();
+    if (!admin) { showResult('error', 'Not logged in.'); return; }
+
+    excuseConfirmBtn.disabled = true;
+    excuseConfirmBtn.textContent = 'Processing...';
+
+    let successCount = 0, alreadyCount = 0, errorCount = 0;
+    let chain = Promise.resolve();
+
+    pendingExcuseIds.forEach(function (id) {
+      chain = chain.then(function () {
+        const timeLabel = new Date().toLocaleTimeString();
+        return apiCall({ action: 'setStatus', id: id, session: confirmedSession, status: 'Excused', admin: admin.name, via: 'Bulk Excuse' })
+          .then(function (res) {
+            const cls = res.ok ? (res.alreadySame ? 'warning' : 'success') : 'error';
+            addHistoryEntry({ time: timeLabel, session: confirmedSession, message: res.message, status: cls, queued: false });
+            if (res.ok && !res.alreadySame) successCount++;
+            else if (res.ok) alreadyCount++;
+            else errorCount++;
+          })
+          .catch(function () {
+            errorCount++;
+            addHistoryEntry({ time: timeLabel, session: confirmedSession, message: 'Could not excuse ID ' + id + ' (network error).', status: 'error', queued: false });
+          });
+      });
+    });
+
+    chain.then(function () {
+      excuseConfirmBtn.disabled = false;
+      excuseConfirmBtn.textContent = 'Confirm Excuse';
+      excuseConfirmOverlay.classList.add('hidden');
+      excuseSection.classList.add('hidden');
+      excuseIdsInput.value = '';
+      const summary = successCount + ' marked excused, ' + alreadyCount + ' already excused' +
+        (errorCount ? ', ' + errorCount + ' failed' : '') + '.';
+      showResult(errorCount > 0 ? 'warning' : 'success', summary);
+    });
+  });
+
+  // ---- Per-session status edit (from student detail page) ----
+  let pendingStatusEdit = null; // { id, name, session, status }
+
+  function showStatusSection(section) {
+    statusSelectSection.classList.toggle('hidden', section !== 'select');
+    statusConfirmSection.classList.toggle('hidden', section !== 'confirm');
+  }
+
+  function openStatusEdit(studentId, studentName, session) {
+    pendingStatusEdit = { id: studentId, name: studentName, session: session, status: null };
+    statusSessionLabel.textContent = session;
+    statusStudentLabel.textContent = studentName;
+    showStatusSection('select');
+    statusEditOverlay.classList.remove('hidden');
+  }
+
+  document.querySelectorAll('.status-choice').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!pendingStatusEdit) return;
+      const status = btn.dataset.status;
+      pendingStatusEdit.status = status;
+      statusConfirmText.innerHTML = 'Set Session <b class="mono">' + pendingStatusEdit.session + '</b> for <b>' +
+        escapeHtml(pendingStatusEdit.name) + '</b> to <b>' + status + '</b>?';
+      showStatusSection('confirm');
+    });
+  });
+
+  statusCancelBtn.addEventListener('click', function () { statusEditOverlay.classList.add('hidden'); });
+  statusBackBtn.addEventListener('click', function () { showStatusSection('select'); });
+
+  statusConfirmBtn.addEventListener('click', function () {
+    if (!pendingStatusEdit || !pendingStatusEdit.status) return;
+    const admin = getAdmin();
+    statusConfirmBtn.disabled = true;
+    statusConfirmBtn.textContent = 'Saving...';
+
+    apiCall({
+      action: 'setStatus', id: pendingStatusEdit.id, session: pendingStatusEdit.session,
+      status: pendingStatusEdit.status, admin: admin ? admin.name : '', via: 'Manual Edit'
+    }).then(function (res) {
+      statusConfirmBtn.disabled = false;
+      statusConfirmBtn.textContent = 'Confirm';
+      if (!res.ok) { alert(res.message || 'Could not update.'); return; }
+      statusEditOverlay.classList.add('hidden');
+      openStudentDetail(pendingStatusEdit.id); // refresh detail view to show the updated pill
+    }).catch(function () {
+      statusConfirmBtn.disabled = false;
+      statusConfirmBtn.textContent = 'Confirm';
+      alert('Could not reach the server.');
+    });
   });
 
   // ---- Init ----
