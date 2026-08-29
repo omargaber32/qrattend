@@ -303,6 +303,12 @@
       <div class="divider">or</div>
       <button id="uploadBtn" class="btn-secondary" style="width:100%;">Upload QR Image</button>
       <input type="file" id="fileInput" accept="image/*">
+      <div class="divider">or</div>
+      <div class="field">
+        <label for="manualIdsInput">Enter Student ID(s) manually (comma-separated)</label>
+        <input type="text" id="manualIdsInput" placeholder="e.g. S001, S002, S003">
+      </div>
+      <button id="manualSubmitBtn" class="btn-secondary" style="width:100%;">Mark Present</button>
       <div id="result" class="idle">Waiting to scan...</div>
       <div id="queueNote" class="hidden"></div>
     </div>
@@ -492,6 +498,8 @@
   const stopBtn = document.getElementById('stopBtn');
   const uploadBtn = document.getElementById('uploadBtn');
   const fileInput = document.getElementById('fileInput');
+  const manualIdsInput = document.getElementById('manualIdsInput');
+  const manualSubmitBtn = document.getElementById('manualSubmitBtn');
   const resultDiv = document.getElementById('result');
   const queueNote = document.getElementById('queueNote');
   const localHistoryCard = document.getElementById('localHistoryCard');
@@ -1182,6 +1190,63 @@
     html5QrCode.scanFile(file, true)
       .then(function (decodedText) { processCode(decodedText, true); })
       .catch(function (err) { showResult('error', 'Could not read QR from image: ' + err); });
+  });
+
+  // ---- Manual ID entry (one or more, comma-separated) ----
+  function processManualIds() {
+    if (!checkConfigured()) return;
+    const admin = getAdmin();
+    if (!admin) { showResult('error', 'Not logged in.'); return; }
+    if (!confirmedSession) { showResult('error', 'Confirm a session first.'); return; }
+
+    const ids = manualIdsInput.value.split(',')
+      .map(function (s) { return s.trim(); })
+      .filter(function (s) { return s.length > 0; });
+    if (ids.length === 0) return;
+
+    manualSubmitBtn.disabled = true;
+    manualSubmitBtn.textContent = 'Processing...';
+    showResult('idle', 'Processing ' + ids.length + ' ID(s)...');
+
+    let successCount = 0, dupCount = 0, errorCount = 0;
+    let chain = Promise.resolve();
+
+    ids.forEach(function (id) {
+      chain = chain.then(function () {
+        const payload = { id: id, session: confirmedSession, admin: admin.name };
+        const timeLabel = new Date().toLocaleTimeString();
+        return apiCall(payload)
+          .then(function (res) {
+            const cls = res.ok ? (res.alreadyMarked ? 'warning' : 'success') : 'error';
+            addHistoryEntry({ time: timeLabel, session: confirmedSession, message: res.message, status: cls, queued: false });
+            if (res.ok && !res.alreadyMarked) {
+              successCount++; presentCount += 1; counterSpan.textContent = presentCount + ' / ' + totalCount;
+            } else if (res.ok && res.alreadyMarked) {
+              dupCount++;
+            } else {
+              errorCount++;
+            }
+          })
+          .catch(function () {
+            queueScan(payload);
+            const msg = 'Offline — ID ' + id + ' queued for Session ' + confirmedSession;
+            addHistoryEntry({ time: timeLabel, session: confirmedSession, message: msg, status: 'warning', queued: true });
+          });
+      });
+    });
+
+    chain.then(function () {
+      manualSubmitBtn.disabled = false;
+      manualSubmitBtn.textContent = 'Mark Present';
+      manualIdsInput.value = '';
+      const summary = successCount + ' marked present, ' + dupCount + ' already present' +
+        (errorCount ? ', ' + errorCount + ' not found' : '') + '.';
+      showResult(errorCount > 0 ? 'warning' : 'success', summary);
+    });
+  }
+  manualSubmitBtn.addEventListener('click', processManualIds);
+  manualIdsInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') processManualIds();
   });
 
   // ---- Init ----
