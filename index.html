@@ -388,33 +388,79 @@
 <!-- Add student modal -->
 <div id="modalOverlay" class="hidden">
   <div id="modalCard">
-    <h3>Add Student</h3>
-    <div class="field">
-      <label for="newStudentName">Full name</label>
-      <input type="text" id="newStudentName">
+    <div id="addFormSection">
+      <h3>Add Student</h3>
+      <div class="field">
+        <label for="newStudentName">Full name</label>
+        <input type="text" id="newStudentName">
+      </div>
+      <div class="field">
+        <label for="newStudentPhone">Phone</label>
+        <input type="tel" id="newStudentPhone">
+      </div>
+      <div class="field">
+        <label for="newStudentEmail">Email</label>
+        <input type="email" id="newStudentEmail">
+      </div>
+      <div id="addStudentError" style="color:var(--danger); font-size:13px; min-height:16px; margin-bottom:6px;"></div>
+      <div class="btn-row">
+        <button class="btn-secondary" id="cancelAddStudent">Cancel</button>
+        <button class="btn-primary" id="submitAddStudent">Add Student</button>
+      </div>
     </div>
-    <div class="field">
-      <label for="newStudentPhone">Phone</label>
-      <input type="tel" id="newStudentPhone">
+
+    <div id="existsSection" class="hidden">
+      <h3>Student Already Exists</h3>
+      <p style="color:var(--text-secondary); font-size:13px;">A student with this phone or email is already registered:</p>
+      <div class="card" style="margin:10px 0;">
+        <div class="info-row"><span class="k">Name</span><span class="v" id="existsName">-</span></div>
+        <div class="info-row"><span class="k">ID</span><span class="v" id="existsId">-</span></div>
+        <div class="info-row"><span class="k">Phone</span><span class="v" id="existsPhone">-</span></div>
+        <div class="info-row"><span class="k">Email</span><span class="v" id="existsEmail">-</span></div>
+      </div>
+      <div class="btn-row"><button class="btn-secondary" id="existsBackBtn" style="width:100%;">Back</button></div>
     </div>
-    <div class="field">
-      <label for="newStudentEmail">Email</label>
-      <input type="email" id="newStudentEmail">
+
+    <div id="removedSection" class="hidden">
+      <h3>Previously Removed</h3>
+      <p style="color:var(--text-secondary); font-size:13px;">This phone/email belonged to a student who was removed:</p>
+      <div class="card" style="margin:10px 0;">
+        <div class="info-row"><span class="k">Name</span><span class="v" id="removedName">-</span></div>
+        <div class="info-row"><span class="k">Old ID</span><span class="v" id="removedId">-</span></div>
+      </div>
+      <p style="color:var(--text-secondary); font-size:13px;">Add them again as a new student?</p>
+      <div class="btn-row">
+        <button class="btn-secondary" id="removedNoBtn">No, Cancel</button>
+        <button class="btn-primary" id="removedYesBtn">Yes, Add Them</button>
+      </div>
     </div>
-    <div id="addStudentError" style="color:var(--danger); font-size:13px; min-height:16px; margin-bottom:6px;"></div>
+  </div>
+</div>
+
+<!-- Delete student confirmation modal -->
+<div id="deleteOverlay" class="hidden">
+  <div id="modalCard">
+    <h3 style="color:var(--danger);">Delete Student</h3>
+    <p style="color:var(--text-secondary); font-size:13px;">This will permanently remove <b id="deleteStudentName" class="mono">this student</b> from Students, their QR code, and their live attendance row. Their full record (including attendance history) will be archived in "Removed Students".</p>
+    <div class="field">
+      <label for="deleteConfirmInput">Type their full name to confirm</label>
+      <input type="text" id="deleteConfirmInput" autocomplete="off">
+    </div>
+    <div id="deleteError" style="color:var(--danger); font-size:13px; min-height:16px;"></div>
     <div class="btn-row">
-      <button class="btn-secondary" id="cancelAddStudent">Cancel</button>
-      <button class="btn-primary" id="submitAddStudent">Add Student</button>
+      <button class="btn-secondary" id="deleteCancelBtn">Cancel</button>
+      <button class="btn-primary" id="deleteConfirmBtn" style="background:var(--danger); color:#fff;" disabled>Delete</button>
     </div>
   </div>
 </div>
 
 <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
 <script>
+<script>
   // ============================================================
   // CONFIG — paste your Apps Script Web App URL here (ends in /exec)
   // ============================================================
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx7PumlTAXBV9MKF5H_k-LNgDScuuSw49JUfNpL76fGyE0Xdg2CIe1pTDCUyjA720Ul/exec";
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyqhg6mDXbAZrriYkz_kSgLmATOGfiLdE9QShxUjyr5AKWEgsqe8vlVl-nZonGbklos/exec";
   // ============================================================
 
   const SESSIONS = 14;
@@ -478,12 +524,33 @@
   const detailContent = document.getElementById('detailContent');
 
   const modalOverlay = document.getElementById('modalOverlay');
+  const addFormSection = document.getElementById('addFormSection');
+  const existsSection = document.getElementById('existsSection');
+  const removedSection = document.getElementById('removedSection');
+  const existsName = document.getElementById('existsName');
+  const existsId = document.getElementById('existsId');
+  const existsPhone = document.getElementById('existsPhone');
+  const existsEmail = document.getElementById('existsEmail');
+  const existsBackBtn = document.getElementById('existsBackBtn');
+  const removedName = document.getElementById('removedName');
+  const removedId = document.getElementById('removedId');
+  const removedNoBtn = document.getElementById('removedNoBtn');
+  const removedYesBtn = document.getElementById('removedYesBtn');
   const newStudentName = document.getElementById('newStudentName');
   const newStudentPhone = document.getElementById('newStudentPhone');
   const newStudentEmail = document.getElementById('newStudentEmail');
   const addStudentError = document.getElementById('addStudentError');
   const cancelAddStudent = document.getElementById('cancelAddStudent');
   const submitAddStudent = document.getElementById('submitAddStudent');
+
+  const deleteOverlay = document.getElementById('deleteOverlay');
+  const deleteStudentName = document.getElementById('deleteStudentName');
+  const deleteConfirmInput = document.getElementById('deleteConfirmInput');
+  const deleteError = document.getElementById('deleteError');
+  const deleteCancelBtn = document.getElementById('deleteCancelBtn');
+  const deleteConfirmBtn = document.getElementById('deleteConfirmBtn');
+
+  let currentStudentDetail = null; // { student, sessions } for whichever student's detail page is open
 
   // Populate session dropdowns (1..14)
   for (let s = 1; s <= SESSIONS; s++) {
@@ -707,6 +774,7 @@
     detailOverlay.classList.remove('hidden');
     apiCall({ action: 'getStudentDetail', id: id }).then(function (res) {
       if (!res.ok) { detailContent.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>'; return; }
+      currentStudentDetail = res;
       const s = res.student;
       detailTitle.textContent = s.name || s.id;
       let html = '<div class="card"><p class="card-title">Details</p>' +
@@ -720,7 +788,20 @@
         html += '<span class="session-pill ' + (sess.present ? 'present' : 'absent') + '" title="Session ' + sess.session + (sess.time ? ' — ' + sess.time : '') + '">' + sess.session + '</span>';
       });
       html += '</div></div>';
+      html += '<div class="btn-row">' +
+        '<button class="btn-secondary" id="downloadCardBtn" style="width:100%;">Download Card</button>' +
+        '</div>' +
+        '<div class="btn-row">' +
+        '<button class="btn-danger-outline" id="deleteStudentBtn" style="width:100%; padding:12px;">Delete Student</button>' +
+        '</div>';
       detailContent.innerHTML = html;
+
+      document.getElementById('downloadCardBtn').addEventListener('click', function () {
+        downloadStudentCardPDF(s);
+      });
+      document.getElementById('deleteStudentBtn').addEventListener('click', function () {
+        openDeleteConfirm(s);
+      });
     }).catch(function () {
       detailContent.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
     });
@@ -728,24 +809,70 @@
 
   detailBackBtn.addEventListener('click', function () { detailOverlay.classList.add('hidden'); });
 
+  // ---- Delete student ----
+  function openDeleteConfirm(student) {
+    deleteStudentName.textContent = student.name || student.id;
+    deleteConfirmInput.value = '';
+    deleteError.textContent = '';
+    deleteConfirmBtn.disabled = true;
+    deleteConfirmBtn.textContent = 'Delete';
+    deleteOverlay.classList.remove('hidden');
+    deleteConfirmInput.focus();
+  }
+  deleteConfirmInput.addEventListener('input', function () {
+    const s = currentStudentDetail && currentStudentDetail.student;
+    const match = s && deleteConfirmInput.value.trim().toLowerCase() === String(s.name).trim().toLowerCase();
+    deleteConfirmBtn.disabled = !match;
+  });
+  deleteCancelBtn.addEventListener('click', function () { deleteOverlay.classList.add('hidden'); });
+  deleteConfirmBtn.addEventListener('click', function () {
+    const s = currentStudentDetail && currentStudentDetail.student;
+    if (!s) return;
+    const admin = getAdmin();
+    deleteConfirmBtn.disabled = true;
+    deleteConfirmBtn.textContent = 'Deleting...';
+    apiCall({ action: 'deleteStudent', id: s.id, confirmName: deleteConfirmInput.value.trim(), admin: admin ? admin.name : '' })
+      .then(function (res) {
+        if (!res.ok) {
+          deleteError.textContent = res.message || 'Could not delete student.';
+          deleteConfirmBtn.disabled = false;
+          deleteConfirmBtn.textContent = 'Delete';
+          return;
+        }
+        deleteOverlay.classList.add('hidden');
+        detailOverlay.classList.add('hidden');
+        loadStudentsList();
+      })
+      .catch(function () {
+        deleteError.textContent = 'Could not reach the server.';
+        deleteConfirmBtn.disabled = false;
+        deleteConfirmBtn.textContent = 'Delete';
+      });
+  });
+
   // ---- Add student modal ----
+  function showModalSection(section) {
+    addFormSection.classList.toggle('hidden', section !== 'form');
+    existsSection.classList.toggle('hidden', section !== 'exists');
+    removedSection.classList.toggle('hidden', section !== 'removed');
+  }
+
   addStudentBtn.addEventListener('click', function () {
     newStudentName.value = ''; newStudentPhone.value = ''; newStudentEmail.value = '';
     addStudentError.textContent = '';
     submitAddStudent.disabled = false; submitAddStudent.textContent = 'Add Student';
+    showModalSection('form');
     modalOverlay.classList.remove('hidden');
   });
   cancelAddStudent.addEventListener('click', function () { modalOverlay.classList.add('hidden'); });
+  existsBackBtn.addEventListener('click', function () { showModalSection('form'); });
+  removedNoBtn.addEventListener('click', function () { showModalSection('form'); });
 
-  submitAddStudent.addEventListener('click', function () {
-    const name = newStudentName.value.trim();
-    const phone = newStudentPhone.value.trim();
-    const email = newStudentEmail.value.trim();
-    if (!name) { addStudentError.textContent = 'Name is required.'; return; }
-    addStudentError.textContent = '';
+  let pendingNewStudent = null; // { name, phone, email } while a removed-student confirmation is showing
+
+  function actuallyAddStudent(name, phone, email) {
     submitAddStudent.disabled = true;
     submitAddStudent.textContent = 'Adding...';
-
     apiCall({ action: 'addStudent', name: name, phone: phone, email: email })
       .then(function (res) {
         submitAddStudent.disabled = false;
@@ -754,6 +881,52 @@
         modalOverlay.classList.add('hidden');
         loadStudentsList();
         downloadStudentCardPDF(res);
+      })
+      .catch(function () {
+        submitAddStudent.disabled = false;
+        submitAddStudent.textContent = 'Add Student';
+        addStudentError.textContent = 'Could not reach the server.';
+      });
+  }
+
+  removedYesBtn.addEventListener('click', function () {
+    if (!pendingNewStudent) return;
+    showModalSection('form');
+    actuallyAddStudent(pendingNewStudent.name, pendingNewStudent.phone, pendingNewStudent.email);
+    pendingNewStudent = null;
+  });
+
+  submitAddStudent.addEventListener('click', function () {
+    const name = newStudentName.value.trim();
+    const phone = newStudentPhone.value.trim();
+    const email = newStudentEmail.value.trim();
+    if (!name) { addStudentError.textContent = 'Name is required.'; return; }
+    addStudentError.textContent = '';
+    submitAddStudent.disabled = true;
+    submitAddStudent.textContent = 'Checking...';
+
+    apiCall({ action: 'checkStudent', phone: phone, email: email })
+      .then(function (res) {
+        submitAddStudent.disabled = false;
+        submitAddStudent.textContent = 'Add Student';
+        if (!res.ok) { addStudentError.textContent = res.message || 'Could not check student.'; return; }
+
+        if (res.status === 'exists') {
+          existsName.textContent = res.student.name || '-';
+          existsId.textContent = res.student.id || '-';
+          existsPhone.textContent = res.student.phone || '-';
+          existsEmail.textContent = res.student.email || '-';
+          showModalSection('exists');
+          return;
+        }
+        if (res.status === 'removed') {
+          removedName.textContent = res.student.name || '-';
+          removedId.textContent = res.student.id || '-';
+          pendingNewStudent = { name: name, phone: phone, email: email };
+          showModalSection('removed');
+          return;
+        }
+        actuallyAddStudent(name, phone, email);
       })
       .catch(function () {
         submitAddStudent.disabled = false;
@@ -774,28 +947,55 @@
         const dataUrl = canvas.toDataURL('image/png');
 
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ unit: 'mm', format: [90, 55] });
+        // Explicit landscape orientation + generous size (standard ID-card-ish, in mm)
+        const W = 100, H = 62;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [W, H] });
+
         doc.setFillColor(10, 14, 20);
-        doc.rect(0, 0, 90, 55, 'F');
+        doc.rect(0, 0, W, H, 'F');
+
         doc.setTextColor(46, 200, 102);
-        doc.setFontSize(8);
-        doc.text('PROJECT ENGINE ATTENDANCE', 5, 7);
-        doc.addImage(dataUrl, 'PNG', 5, 10, 40, 40);
+        doc.setFontSize(7);
+        doc.text('PROJECT ENGINE ATTENDANCE', 6, 7);
+
+        // QR on the left, with margin on all sides
+        const qrSize = 44;
+        doc.addImage(dataUrl, 'PNG', 6, 12, qrSize, qrSize);
+
+        // Text block on the right, wrapped to fit remaining width
+        const textX = 6 + qrSize + 6;      // left edge of text block
+        const textMaxWidth = W - textX - 6; // right margin
+        let y = 16;
+
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(12);
-        doc.text(String(student.name), 48, 20);
+        doc.setFontSize(13);
+        const nameLines = doc.splitTextToSize(String(student.name || ''), textMaxWidth);
+        doc.text(nameLines, textX, y);
+        y += nameLines.length * 6 + 4;
+
         doc.setFontSize(9);
         doc.setTextColor(180, 180, 180);
-        doc.text('ID: ' + student.id, 48, 27);
-        if (student.phone) doc.text('Phone: ' + student.phone, 48, 33);
-        if (student.email) doc.text('Email: ' + student.email, 48, 39);
+        doc.text('ID: ' + student.id, textX, y);
+        y += 7;
+
+        if (student.phone) {
+          const phoneLines = doc.splitTextToSize('Phone: ' + student.phone, textMaxWidth);
+          doc.text(phoneLines, textX, y);
+          y += phoneLines.length * 5 + 2;
+        }
+        if (student.email) {
+          const emailLines = doc.splitTextToSize('Email: ' + student.email, textMaxWidth);
+          doc.text(emailLines, textX, y);
+          y += emailLines.length * 5 + 2;
+        }
+
         doc.save(student.id + '_qr_card.pdf');
       } catch (e) {
-        alert('Student was added, but the QR card PDF could not be generated (' + e.message + '). You can still find their QR in the Codes sheet.');
+        alert('Could not generate the QR card PDF (' + e.message + '). You can still find their QR in the Codes sheet.');
       }
     };
     img.onerror = function () {
-      alert('Student was added, but the QR image could not be loaded for the PDF. You can still find their QR in the Codes sheet.');
+      alert('Could not load the QR image for the PDF. You can still find their QR in the Codes sheet.');
     };
     img.src = qrUrl;
   }
