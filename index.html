@@ -70,10 +70,11 @@
   .card-title::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
 
   label { font-size: 13px; color: var(--text-secondary); display: block; margin-bottom: 6px; }
-  select, input[type=text], input[type=password], input[type=tel], input[type=email] {
+  select, input[type=text], input[type=password], input[type=tel], input[type=email], input[type=date] {
     width: 100%; padding: 12px; background: var(--bg-secondary); border: 1px solid var(--border);
     border-radius: 8px; color: var(--text-primary); font-size: 15px; font-family: 'JetBrains Mono', monospace;
   }
+  input[type=date] { color-scheme: dark; }
   select {
     appearance: none; -webkit-appearance: none;
     background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
@@ -162,6 +163,14 @@
   .info-row:last-child { border-bottom: none; }
   .info-row .k { color: var(--text-dim); }
   .info-row .v { font-family: 'JetBrains Mono', monospace; color: var(--text-primary); text-align: right; }
+  .info-row .v-link-row { display: flex; align-items: center; gap: 8px; }
+  .info-row a.contact-link { color: var(--accent-bright); text-decoration: none; font-family: 'JetBrains Mono', monospace; }
+  .info-row a.contact-link:hover { text-decoration: underline; }
+  .copy-btn {
+    background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border);
+    padding: 3px 9px; font-size: 11px; border-radius: 6px; font-family: 'Inter', sans-serif; font-weight: 600;
+  }
+  .copy-btn:hover { color: var(--accent-bright); border-color: var(--border-bright); }
 
   .session-pill {
     display: inline-flex; align-items: center; justify-content: center;
@@ -349,6 +358,10 @@
           <input type="text" id="filterStudent" placeholder="e.g. S001">
         </div>
       </div>
+      <div class="field">
+        <label for="filterDate">Date</label>
+        <input type="date" id="filterDate">
+      </div>
       <button id="loadLogBtn" class="btn-primary">Load Log</button>
       <div id="logList" style="margin-top:12px;"></div>
       <div id="emptyLog" class="hidden">No matching scans.</div>
@@ -359,6 +372,14 @@
   <!-- ============ SESSIONS TAB ============ -->
   <div class="tab-content" id="tab-sessions">
     <div class="section-header"><p class="card-title" style="margin:0;">14 Sessions</p></div>
+    <div class="field">
+      <label for="sessionSortSelect">Sort by</label>
+      <select id="sessionSortSelect">
+        <option value="number">Session Number</option>
+        <option value="desc">Attendance (High to Low)</option>
+        <option value="asc">Attendance (Low to High)</option>
+      </select>
+    </div>
     <div id="sessionsList"><div class="loading-text">Loading sessions...</div></div>
   </div>
 
@@ -367,6 +388,19 @@
     <div class="section-header">
       <p class="card-title" style="margin:0;">Students</p>
       <button class="fab" id="addStudentBtn">+</button>
+    </div>
+    <div class="field">
+      <label for="studentSearchInput">Search</label>
+      <input type="text" id="studentSearchInput" placeholder="Search by name or ID">
+    </div>
+    <div class="field">
+      <label for="studentSortSelect">Sort by</label>
+      <select id="studentSortSelect">
+        <option value="name-asc">Name (A → Z)</option>
+        <option value="name-desc">Name (Z → A)</option>
+        <option value="attend-desc">Attendance (High to Low)</option>
+        <option value="attend-asc">Attendance (Low to High)</option>
+      </select>
     </div>
     <div id="studentsList"><div class="loading-text">Loading students...</div></div>
     <div id="emptyStudents" class="hidden">No students yet.</div>
@@ -465,7 +499,7 @@
   // ============================================================
   // CONFIG — paste your Apps Script Web App URL here (ends in /exec)
   // ============================================================
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyqhg6mDXbAZrriYkz_kSgLmATOGfiLdE9QShxUjyr5AKWEgsqe8vlVl-nZonGbklos/exec";
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwWyoWEpxNCncKsNlNbQYD_ZYIC1s3Pagq1M35QpOBxSn9q7Y_k7z6secoUzyB2HZu8/exec";
   // ============================================================
 
   const SESSIONS = 14;
@@ -510,6 +544,7 @@
   const filterStatus = document.getElementById('filterStatus');
   const filterAdmin = document.getElementById('filterAdmin');
   const filterStudent = document.getElementById('filterStudent');
+  const filterDate = document.getElementById('filterDate');
   const loadLogBtn = document.getElementById('loadLogBtn');
   const logList = document.getElementById('logList');
   const emptyLog = document.getElementById('emptyLog');
@@ -521,7 +556,10 @@
   const chartWrap = document.getElementById('chartWrap');
 
   const sessionsList = document.getElementById('sessionsList');
+  const sessionSortSelect = document.getElementById('sessionSortSelect');
   const studentsList = document.getElementById('studentsList');
+  const studentSearchInput = document.getElementById('studentSearchInput');
+  const studentSortSelect = document.getElementById('studentSortSelect');
   const emptyStudents = document.getElementById('emptyStudents');
   const addStudentBtn = document.getElementById('addStudentBtn');
 
@@ -704,25 +742,40 @@
   // ============================================================
   // SESSIONS TAB
   // ============================================================
+  let lastSessionsData = null; // { totalStudents, sessionCounts } cached for client-side sorting
+
   function loadSessionsList() {
     sessionsList.innerHTML = '<div class="loading-text">Loading sessions...</div>';
     apiCall({ action: 'getDashboard' }).then(function (res) {
-      sessionsList.innerHTML = '';
       if (!res.ok) { sessionsList.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>'; return; }
-      res.sessionCounts.forEach(function (sc) {
-        const card = document.createElement('div');
-        card.className = 'list-card';
-        card.innerHTML =
-          '<div><div class="title">Session ' + sc.session + '</div>' +
-          '<div class="subtitle">attended: ' + sc.count + ' / ' + res.totalStudents + '</div></div>' +
-          '<div style="display:flex;align-items:center;"><span class="stat">' + sc.count + '</span><span class="chevron">›</span></div>';
-        card.addEventListener('click', function () { openSessionDetail(sc.session); });
-        sessionsList.appendChild(card);
-      });
+      lastSessionsData = res;
+      renderSessionsList();
     }).catch(function () {
       sessionsList.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
     });
   }
+
+  function renderSessionsList() {
+    if (!lastSessionsData) return;
+    const sortMode = sessionSortSelect.value;
+    let counts = lastSessionsData.sessionCounts.slice();
+    if (sortMode === 'desc') counts.sort(function (a, b) { return b.count - a.count; });
+    else if (sortMode === 'asc') counts.sort(function (a, b) { return a.count - b.count; });
+    else counts.sort(function (a, b) { return a.session - b.session; });
+
+    sessionsList.innerHTML = '';
+    counts.forEach(function (sc) {
+      const card = document.createElement('div');
+      card.className = 'list-card';
+      card.innerHTML =
+        '<div><div class="title">Session ' + sc.session + '</div>' +
+        '<div class="subtitle">attended: ' + sc.count + ' / ' + lastSessionsData.totalStudents + '</div></div>' +
+        '<div style="display:flex;align-items:center;"><span class="stat">' + sc.count + '</span><span class="chevron">›</span></div>';
+      card.addEventListener('click', function () { openSessionDetail(sc.session); });
+      sessionsList.appendChild(card);
+    });
+  }
+  sessionSortSelect.addEventListener('change', renderSessionsList);
 
   function openSessionDetail(session) {
     detailTitle.textContent = 'Session ' + session;
@@ -753,27 +806,52 @@
   // ============================================================
   // STUDENTS TAB
   // ============================================================
+  let allStudentsData = []; // cached full list for client-side search/sort
+
   function loadStudentsList() {
     studentsList.innerHTML = '<div class="loading-text">Loading students...</div>';
     emptyStudents.classList.add('hidden');
     apiCall({ action: 'getStudentsList' }).then(function (res) {
-      studentsList.innerHTML = '';
       if (!res.ok) { studentsList.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>'; return; }
-      if (res.students.length === 0) { emptyStudents.classList.remove('hidden'); return; }
-      res.students.forEach(function (s) {
-        const card = document.createElement('div');
-        card.className = 'list-card';
-        card.innerHTML =
-          '<div><div class="title">' + escapeHtml(s.name || s.id) + '</div>' +
-          '<div class="subtitle">ID: ' + escapeHtml(s.id) + ' · attended ' + s.attendedCount + ' session' + (s.attendedCount === 1 ? '' : 's') + '</div></div>' +
-          '<span class="chevron">›</span>';
-        card.addEventListener('click', function () { openStudentDetail(s.id); });
-        studentsList.appendChild(card);
-      });
+      allStudentsData = res.students;
+      renderStudentsList();
     }).catch(function () {
       studentsList.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
     });
   }
+
+  function renderStudentsList() {
+    const query = studentSearchInput.value.trim().toLowerCase();
+    let list = allStudentsData.filter(function (s) {
+      if (!query) return true;
+      return String(s.name || '').toLowerCase().indexOf(query) !== -1 ||
+             String(s.id || '').toLowerCase().indexOf(query) !== -1;
+    });
+
+    const sortMode = studentSortSelect.value;
+    if (sortMode === 'name-asc') list.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    else if (sortMode === 'name-desc') list.sort(function (a, b) { return String(b.name).localeCompare(String(a.name)); });
+    else if (sortMode === 'attend-desc') list.sort(function (a, b) { return b.attendedCount - a.attendedCount; });
+    else if (sortMode === 'attend-asc') list.sort(function (a, b) { return a.attendedCount - b.attendedCount; });
+
+    studentsList.innerHTML = '';
+    if (allStudentsData.length === 0) { emptyStudents.textContent = 'No students yet.'; emptyStudents.classList.remove('hidden'); return; }
+    if (list.length === 0) { emptyStudents.textContent = 'No students match your search.'; emptyStudents.classList.remove('hidden'); return; }
+    emptyStudents.classList.add('hidden');
+
+    list.forEach(function (s) {
+      const card = document.createElement('div');
+      card.className = 'list-card';
+      card.innerHTML =
+        '<div><div class="title">' + escapeHtml(s.name || s.id) + '</div>' +
+        '<div class="subtitle">ID: ' + escapeHtml(s.id) + ' · attended ' + s.attendedCount + ' session' + (s.attendedCount === 1 ? '' : 's') + '</div></div>' +
+        '<span class="chevron">›</span>';
+      card.addEventListener('click', function () { openStudentDetail(s.id); });
+      studentsList.appendChild(card);
+    });
+  }
+  studentSearchInput.addEventListener('input', renderStudentsList);
+  studentSortSelect.addEventListener('change', renderStudentsList);
 
   function openStudentDetail(id) {
     detailTitle.textContent = 'Student';
@@ -784,11 +862,21 @@
       currentStudentDetail = res;
       const s = res.student;
       detailTitle.textContent = s.name || s.id;
+
+      const phoneCell = s.phone
+        ? '<div class="v-link-row"><a class="contact-link" href="tel:' + escapeHtml(s.phone) + '">' + escapeHtml(s.phone) + '</a>' +
+          '<button class="copy-btn" data-copy="' + escapeHtml(s.phone) + '">Copy</button></div>'
+        : '<span class="v">-</span>';
+      const emailCell = s.email
+        ? '<div class="v-link-row"><a class="contact-link" href="mailto:' + escapeHtml(s.email) + '">' + escapeHtml(s.email) + '</a>' +
+          '<button class="copy-btn" data-copy="' + escapeHtml(s.email) + '">Copy</button></div>'
+        : '<span class="v">-</span>';
+
       let html = '<div class="card"><p class="card-title">Details</p>' +
         '<div class="info-row"><span class="k">Name</span><span class="v">' + escapeHtml(s.name || '-') + '</span></div>' +
         '<div class="info-row"><span class="k">ID</span><span class="v">' + escapeHtml(s.id) + '</span></div>' +
-        '<div class="info-row"><span class="k">Phone</span><span class="v">' + escapeHtml(s.phone || '-') + '</span></div>' +
-        '<div class="info-row"><span class="k">Email</span><span class="v">' + escapeHtml(s.email || '-') + '</span></div>' +
+        '<div class="info-row"><span class="k">Phone</span>' + phoneCell + '</div>' +
+        '<div class="info-row"><span class="k">Email</span>' + emailCell + '</div>' +
         '</div>';
       html += '<div class="card"><p class="card-title">Sessions Attended</p><div>';
       res.sessions.forEach(function (sess) {
@@ -808,6 +896,24 @@
       });
       document.getElementById('deleteStudentBtn').addEventListener('click', function () {
         openDeleteConfirm(s);
+      });
+      detailContent.querySelectorAll('.copy-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          const value = btn.dataset.copy;
+          const doneLabel = function () {
+            const original = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(function () { btn.textContent = original; }, 1200);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(value).then(doneLabel).catch(function () {
+              alert('Could not copy automatically — value: ' + value);
+            });
+          } else {
+            alert('Could not copy automatically — value: ' + value);
+          }
+        });
       });
     }).catch(function () {
       detailContent.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
@@ -1057,7 +1163,7 @@
     loadLogBtn.disabled = true; loadLogBtn.textContent = 'Loading...';
     const filters = {
       session: filterSession.value, status: filterStatus.value,
-      admin: filterAdmin.value.trim(), studentId: filterStudent.value.trim()
+      admin: filterAdmin.value.trim(), studentId: filterStudent.value.trim(), date: filterDate.value
     };
     apiCall({ action: 'getLogs', filters: filters }).then(function (res) {
       loadLogBtn.disabled = false; loadLogBtn.textContent = 'Load Log';
