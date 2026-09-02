@@ -320,6 +320,9 @@
         <button id="stopBtn" class="btn-secondary hidden">Stop</button>
       </div>
       <div id="reader"></div>
+      <div id="result" class="idle">Waiting to scan...</div>
+      <div id="queueNote" class="hidden"></div>
+
       <div class="divider">or</div>
       <button id="uploadBtn" class="btn-secondary" style="width:100%;">Upload QR Image</button>
       <input type="file" id="fileInput" accept="image/*">
@@ -339,9 +342,6 @@
         </div>
         <button id="excusePreviewBtn" class="btn-secondary" style="width:100%;">Review &amp; Confirm</button>
       </div>
-
-      <div id="result" class="idle">Waiting to scan...</div>
-      <div id="queueNote" class="hidden"></div>
     </div>
 
     <div class="card hidden" id="localHistoryCard">
@@ -394,7 +394,7 @@
 
   <!-- ============ SESSIONS TAB ============ -->
   <div class="tab-content" id="tab-sessions">
-    <div class="section-header"><p class="card-title" style="margin:0;">14 Sessions</p></div>
+    <div class="section-header"><p class="card-title" style="margin:0;" id="sessionsTabTitle">Sessions</p></div>
     <div class="field">
       <label for="sessionSortSelect">Sort by</label>
       <select id="sessionSortSelect">
@@ -423,6 +423,14 @@
         <option value="name-desc">Name (Z → A)</option>
         <option value="attend-desc">Attendance (High to Low)</option>
         <option value="attend-asc">Attendance (Low to High)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="studentFilterSelect">Show</label>
+      <select id="studentFilterSelect">
+        <option value="all">All (Active + Removed)</option>
+        <option value="active">Active only</option>
+        <option value="removed">Removed only</option>
       </select>
     </div>
     <div id="studentsList"><div class="loading-text">Loading students...</div></div>
@@ -559,13 +567,13 @@
   // ============================================================
   // CONFIG — paste your Apps Script Web App URL here (ends in /exec)
   // ============================================================
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUTdBOUdZYrYxr01d179lztIrsPOuFVe9kXQKjvGeYrdml-zIxxrRHhNrD-C4AQ2wo/exec";
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzxHAOV1t6Uhq2yUs0qN7WFJPZZ3fzA9ldkbvYpNEWRk8eDU9fOkYELM-Q3F_0DQT4/exec";
   // Upload card-template.png into the SAME GitHub repo/folder as this file.
   const CARD_TEMPLATE_URL = "card-template.png";
   // How long (ms) to ignore further camera reads after a scan is processed —
   // stops the camera re-reading the same code before the admin moves the phone.
   // Increase this later if it's still double-firing; decrease if scanning feels sluggish.
-  let SCAN_COOLDOWN_MS = 1000;
+  let SCAN_COOLDOWN_MS = 3000;
   // ============================================================
 
   const SESSIONS = 16;
@@ -645,6 +653,7 @@
   const studentsList = document.getElementById('studentsList');
   const studentSearchInput = document.getElementById('studentSearchInput');
   const studentSortSelect = document.getElementById('studentSortSelect');
+  const studentFilterSelect = document.getElementById('studentFilterSelect');
   const emptyStudents = document.getElementById('emptyStudents');
   const addStudentBtn = document.getElementById('addStudentBtn');
 
@@ -682,7 +691,9 @@
 
   let currentStudentDetail = null; // { student, sessions } for whichever student's detail page is open
 
-  // Populate session dropdowns (1..14)
+  // Populate session dropdowns and the Sessions tab title from the SESSIONS constant,
+  // so this never drifts out of sync if SESSIONS is changed later.
+  document.getElementById('sessionsTabTitle').textContent = SESSIONS + ' Sessions';
   for (let s = 1; s <= SESSIONS; s++) {
     const opt = document.createElement('option');
     opt.value = s; opt.textContent = 'Session ' + s;
@@ -936,6 +947,8 @@
   function renderStudentsList() {
     if (studentsData === null) return;
     const query = studentSearchInput.value.trim().toLowerCase();
+    const filterMode = studentFilterSelect.value; // 'all' | 'active' | 'removed'
+
     let list = studentsData.filter(function (s) {
       if (!query) return true;
       return String(s.name || '').toLowerCase().indexOf(query) !== -1 ||
@@ -949,16 +962,24 @@
     else if (sortMode === 'attend-desc') list.sort(function (a, b) { return b.attendedCount - a.attendedCount; });
     else if (sortMode === 'attend-asc') list.sort(function (a, b) { return a.attendedCount - b.attendedCount; });
 
-    const removedList = (removedStudentsData || []).filter(function (s) {
+    let removedList = (removedStudentsData || []).filter(function (s) {
       if (!query) return true;
       return String(s.name || '').toLowerCase().indexOf(query) !== -1 ||
-             String(s.id || '').toLowerCase().indexOf(query) !== -1;
+             String(s.id || '').toLowerCase().indexOf(query) !== -1 ||
+             String(s.phone || '').toLowerCase().indexOf(query) !== -1;
     });
+
+    if (filterMode === 'active') removedList = [];
+    if (filterMode === 'removed') list = [];
 
     studentsList.innerHTML = '';
     const totalKnown = studentsData.length + (removedStudentsData ? removedStudentsData.length : 0);
     if (totalKnown === 0) { emptyStudents.textContent = 'No students yet.'; emptyStudents.classList.remove('hidden'); return; }
-    if (list.length === 0 && removedList.length === 0) { emptyStudents.textContent = 'No students match your search.'; emptyStudents.classList.remove('hidden'); return; }
+    if (list.length === 0 && removedList.length === 0) {
+      emptyStudents.textContent = query ? 'No students match your search.' : 'Nothing to show for this filter.';
+      emptyStudents.classList.remove('hidden');
+      return;
+    }
     emptyStudents.classList.add('hidden');
 
     list.forEach(function (s) {
@@ -987,6 +1008,7 @@
   }
   studentSearchInput.addEventListener('input', renderStudentsList);
   studentSortSelect.addEventListener('change', renderStudentsList);
+  studentFilterSelect.addEventListener('change', renderStudentsList);
 
   function openRemovedStudentDetail(id) {
     detailTitle.textContent = 'Removed Student';
