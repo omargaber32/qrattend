@@ -136,6 +136,8 @@
     padding: 14px 16px; margin-bottom: 10px; cursor: pointer; transition: border-color 0.15s ease;
   }
   .list-card:hover { border-color: var(--border-bright); }
+  .list-card.removed-card { background: rgba(248,81,73,0.05); border-color: rgba(248,81,73,0.3); }
+  .list-card.removed-card:hover { border-color: rgba(248,81,73,0.55); }
   .list-card .title { font-weight: 600; font-size: 14px; }
   .list-card .subtitle { font-size: 12px; color: var(--text-dim); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
   .list-card .stat { color: var(--accent); font-weight: 700; font-family: 'JetBrains Mono', monospace; font-size: 15px; }
@@ -324,7 +326,7 @@
       <div class="divider">or</div>
       <div class="field">
         <label for="manualIdsInput">Enter Student ID(s) manually (comma-separated)</label>
-        <input type="text" id="manualIdsInput" placeholder="e.g. S001, S002, S003">
+        <input type="text" id="manualIdsInput" placeholder="e.g. PES4_001, PES4_002">
       </div>
       <button id="manualSubmitBtn" class="btn-secondary" style="width:100%;">Mark Present</button>
 
@@ -333,7 +335,7 @@
       <div id="excuseSection" class="hidden" style="margin-top:10px;">
         <div class="field">
           <label for="excuseIdsInput">Enter Student ID(s) to excuse (comma-separated)</label>
-          <input type="text" id="excuseIdsInput" placeholder="e.g. S001, S002">
+          <input type="text" id="excuseIdsInput" placeholder="e.g. PES4_001, PES4_002">
         </div>
         <button id="excusePreviewBtn" class="btn-secondary" style="width:100%;">Review &amp; Confirm</button>
       </div>
@@ -376,7 +378,7 @@
         </div>
         <div class="field">
           <label for="filterStudent">Student (ID or name)</label>
-          <input type="text" id="filterStudent" placeholder="e.g. S001">
+          <input type="text" id="filterStudent" placeholder="e.g. PES4_001">
         </div>
       </div>
       <div class="field">
@@ -412,7 +414,7 @@
     </div>
     <div class="field">
       <label for="studentSearchInput">Search</label>
-      <input type="text" id="studentSearchInput" placeholder="Search by name or ID">
+      <input type="text" id="studentSearchInput" placeholder="Search by name, ID, or phone">
     </div>
     <div class="field">
       <label for="studentSortSelect">Sort by</label>
@@ -557,7 +559,13 @@
   // ============================================================
   // CONFIG — paste your Apps Script Web App URL here (ends in /exec)
   // ============================================================
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwelxQKKfpwWClDFRY3Wi1Mx51176qi2TXtObMsJGy6wqyQ1OVgpvEc3aD0gEbgzF0G/exec";
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxUTdBOUdZYrYxr01d179lztIrsPOuFVe9kXQKjvGeYrdml-zIxxrRHhNrD-C4AQ2wo/exec";
+  // Upload card-template.png into the SAME GitHub repo/folder as this file.
+  const CARD_TEMPLATE_URL = "card-template.png";
+  // How long (ms) to ignore further camera reads after a scan is processed —
+  // stops the camera re-reading the same code before the admin moves the phone.
+  // Increase this later if it's still double-firing; decrease if scanning feels sluggish.
+  let SCAN_COOLDOWN_MS = 1000;
   // ============================================================
 
   const SESSIONS = 16;
@@ -908,14 +916,18 @@
   // ============================================================
   // STUDENTS TAB
   // ============================================================
+  let removedStudentsData = null; // cached getRemovedStudentsList() response
+
   function fetchStudentsData() {
-    return apiCall({ action: 'getStudentsList' }).then(function (res) {
-      if (!res.ok) {
-        if (studentsData === null) studentsList.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>';
-        return;
-      }
-      studentsData = res.students;
-      if (activeTab === 'students') renderStudentsList();
+    return Promise.all([
+      apiCall({ action: 'getStudentsList' }),
+      apiCall({ action: 'getRemovedStudentsList' })
+    ]).then(function (results) {
+      const activeRes = results[0], removedRes = results[1];
+      if (activeRes.ok) studentsData = activeRes.students;
+      else if (studentsData === null) studentsList.innerHTML = '<div class="loading-text">' + (activeRes.message || 'Could not load.') + '</div>';
+      if (removedRes.ok) removedStudentsData = removedRes.students;
+      if (activeTab === 'students' && activeRes.ok) renderStudentsList();
     }).catch(function () {
       if (studentsData === null) studentsList.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
     });
@@ -927,7 +939,8 @@
     let list = studentsData.filter(function (s) {
       if (!query) return true;
       return String(s.name || '').toLowerCase().indexOf(query) !== -1 ||
-             String(s.id || '').toLowerCase().indexOf(query) !== -1;
+             String(s.id || '').toLowerCase().indexOf(query) !== -1 ||
+             String(s.phone || '').toLowerCase().indexOf(query) !== -1;
     });
 
     const sortMode = studentSortSelect.value;
@@ -936,9 +949,16 @@
     else if (sortMode === 'attend-desc') list.sort(function (a, b) { return b.attendedCount - a.attendedCount; });
     else if (sortMode === 'attend-asc') list.sort(function (a, b) { return a.attendedCount - b.attendedCount; });
 
+    const removedList = (removedStudentsData || []).filter(function (s) {
+      if (!query) return true;
+      return String(s.name || '').toLowerCase().indexOf(query) !== -1 ||
+             String(s.id || '').toLowerCase().indexOf(query) !== -1;
+    });
+
     studentsList.innerHTML = '';
-    if (studentsData.length === 0) { emptyStudents.textContent = 'No students yet.'; emptyStudents.classList.remove('hidden'); return; }
-    if (list.length === 0) { emptyStudents.textContent = 'No students match your search.'; emptyStudents.classList.remove('hidden'); return; }
+    const totalKnown = studentsData.length + (removedStudentsData ? removedStudentsData.length : 0);
+    if (totalKnown === 0) { emptyStudents.textContent = 'No students yet.'; emptyStudents.classList.remove('hidden'); return; }
+    if (list.length === 0 && removedList.length === 0) { emptyStudents.textContent = 'No students match your search.'; emptyStudents.classList.remove('hidden'); return; }
     emptyStudents.classList.add('hidden');
 
     list.forEach(function (s) {
@@ -951,9 +971,54 @@
       card.addEventListener('click', function () { openStudentDetail(s.id); });
       studentsList.appendChild(card);
     });
+
+    // Removed students always appear last, visually distinct (red), regardless of sort mode
+    removedList.forEach(function (s) {
+      const card = document.createElement('div');
+      card.className = 'list-card removed-card';
+      card.innerHTML =
+        '<div><div class="title" style="color:var(--danger);">' + escapeHtml(s.name || s.id) +
+        ' <span class="badge badge-error" style="margin-left:6px;">removed</span></div>' +
+        '<div class="subtitle">ID: ' + escapeHtml(s.id) + (s.removedOn ? ' · removed ' + escapeHtml(String(s.removedOn)) : '') + '</div></div>' +
+        '<span class="chevron" style="color:var(--danger);">›</span>';
+      card.addEventListener('click', function () { openRemovedStudentDetail(s.id); });
+      studentsList.appendChild(card);
+    });
   }
   studentSearchInput.addEventListener('input', renderStudentsList);
   studentSortSelect.addEventListener('change', renderStudentsList);
+
+  function openRemovedStudentDetail(id) {
+    detailTitle.textContent = 'Removed Student';
+    detailContent.innerHTML = '<div class="loading-text">Loading...</div>';
+    detailOverlay.classList.remove('hidden');
+    apiCall({ action: 'getRemovedStudentDetail', id: id }).then(function (res) {
+      if (!res.ok) { detailContent.innerHTML = '<div class="loading-text">' + (res.message || 'Could not load.') + '</div>'; return; }
+      const s = res.student;
+      detailTitle.textContent = (s.name || s.id) + ' (Removed)';
+
+      let html = '<div class="card" style="border-color:rgba(248,81,73,0.4);">' +
+        '<p class="card-title" style="color:var(--danger);">Removed Student</p>' +
+        '<div class="info-row"><span class="k">Name</span><span class="v">' + escapeHtml(s.name || '-') + '</span></div>' +
+        '<div class="info-row"><span class="k">ID</span><span class="v">' + escapeHtml(s.id) + '</span></div>' +
+        '<div class="info-row"><span class="k">Phone</span><span class="v">' + escapeHtml(s.phone || '-') + '</span></div>' +
+        '<div class="info-row"><span class="k">Email</span><span class="v">' + escapeHtml(s.email || '-') + '</span></div>' +
+        '<div class="info-row"><span class="k">Removed On</span><span class="v">' + escapeHtml(String(s.removedOn || '-')) + '</span></div>' +
+        '<div class="info-row"><span class="k">Removed By</span><span class="v">' + escapeHtml(s.removedBy || '-') + '</span></div>' +
+        '</div>';
+
+      html += '<div class="card"><p class="card-title">Attendance at time of removal</p><div>';
+      res.sessions.forEach(function (sess) {
+        const cls = sess.status === 'Present' ? 'present' : sess.status === 'Excused' ? 'excused' : 'absent';
+        html += '<span class="session-pill ' + cls + '" style="cursor:default;" title="Session ' + sess.session + ' — ' + sess.status + (sess.time ? ' (' + sess.time + ')' : '') + '">' + sess.session + '</span>';
+      });
+      html += '</div></div>';
+
+      detailContent.innerHTML = html;
+    }).catch(function () {
+      detailContent.innerHTML = '<div class="loading-text">Could not reach the server.</div>';
+    });
+  }
 
   function openStudentDetail(id) {
     detailTitle.textContent = 'Student';
@@ -1158,69 +1223,82 @@
       });
   });
 
+  // Loads an image (same-origin or CORS-enabled) and returns its pixel data as a
+  // PNG data URL via canvas, plus its natural width/height.
+  function loadImageAsDataURL(url) {
+    return new Promise(function (resolve, reject) {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = function () {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+          canvas.getContext('2d').drawImage(img, 0, 0);
+          resolve({ dataUrl: canvas.toDataURL('image/png'), width: img.naturalWidth, height: img.naturalHeight });
+        } catch (e) { reject(e); }
+      };
+      img.onerror = function () { reject(new Error('failed to load ' + url)); };
+      img.src = url;
+    });
+  }
+
+  // Draws text at (x, y) shrinking the font size until it fits maxWidth (down to
+  // a minimum), then truncates with an ellipsis as a last resort.
+  function fitText(doc, text, x, y, maxWidth, startSize) {
+    text = String(text || '');
+    let size = startSize;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(size);
+    while (size > 6 && doc.getTextWidth(text) > maxWidth) {
+      size -= 0.5;
+      doc.setFontSize(size);
+    }
+    if (doc.getTextWidth(text) > maxWidth) {
+      while (text.length > 1 && doc.getTextWidth(text + '…') > maxWidth) {
+        text = text.slice(0, -1);
+      }
+      text = text + '…';
+    }
+    doc.text(text, x, y);
+  }
+
+  // Card PDF: the actual Project Engine card design (card-template.png) is used
+  // as the full-page background, with the student's QR and Name/ID overlaid at
+  // the exact positions measured from the template (in its native 1024x1536 px
+  // space, scaled to the PDF's mm page size).
   function downloadStudentCardPDF(student) {
     const qrUrl = student.qrUrl || ('https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(student.id));
-    const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.onload = function () {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width; canvas.height = img.height;
-        canvas.getContext('2d').drawImage(img, 0, 0);
-        const dataUrl = canvas.toDataURL('image/png');
 
-        const { jsPDF } = window.jspdf;
-        // Explicit landscape orientation + generous size (standard ID-card-ish, in mm)
-        const W = 100, H = 62;
-        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [W, H] });
+    Promise.all([
+      loadImageAsDataURL(CARD_TEMPLATE_URL),
+      loadImageAsDataURL(qrUrl)
+    ]).then(function (results) {
+      const template = results[0], qr = results[1];
+      const { jsPDF } = window.jspdf;
 
-        doc.setFillColor(10, 14, 20);
-        doc.rect(0, 0, W, H, 'F');
+      // Template is 1024x1536 px (2:3 ratio) — 68x102mm keeps that ratio exactly.
+      const W = 68, H = 102;
+      const scale = W / 1024; // px -> mm, using the template's native pixel space
 
-        doc.setTextColor(46, 200, 102);
-        doc.setFontSize(7);
-        doc.text('PROJECT ENGINE ATTENDANCE', 6, 7);
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [W, H] });
+      doc.addImage(template.dataUrl, 'PNG', 0, 0, W, H);
 
-        // QR on the left, with margin on all sides
-        const qrSize = 44;
-        doc.addImage(dataUrl, 'PNG', 6, 12, qrSize, qrSize);
+      // QR — centered inside the template's white square (measured: x 251–783, y 298–849 px)
+      const qrSize = 33;
+      const qrCx = ((251 + 783) / 2) * scale;
+      const qrCy = ((298 + 849) / 2) * scale;
+      doc.addImage(qr.dataUrl, 'PNG', qrCx - qrSize / 2, qrCy - qrSize / 2, qrSize, qrSize);
 
-        // Text block on the right, wrapped to fit remaining width
-        const textX = 6 + qrSize + 6;      // left edge of text block
-        const textMaxWidth = W - textX - 6; // right margin
-        let y = 16;
+      // Name & ID values, aligned to the same baseline as their printed labels
+      doc.setTextColor(255, 255, 255);
+      fitText(doc, student.name, 377 * scale, 1081 * scale, (863 - 377) * scale, 11);
+      fitText(doc, student.id, 320 * scale, 1202 * scale, (863 - 320) * scale, 11);
 
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(13);
-        const nameLines = doc.splitTextToSize(String(student.name || ''), textMaxWidth);
-        doc.text(nameLines, textX, y);
-        y += nameLines.length * 6 + 4;
-
-        doc.setFontSize(9);
-        doc.setTextColor(180, 180, 180);
-        doc.text('ID: ' + student.id, textX, y);
-        y += 7;
-
-        if (student.phone) {
-          const phoneLines = doc.splitTextToSize('Phone: ' + student.phone, textMaxWidth);
-          doc.text(phoneLines, textX, y);
-          y += phoneLines.length * 5 + 2;
-        }
-        if (student.email) {
-          const emailLines = doc.splitTextToSize('Email: ' + student.email, textMaxWidth);
-          doc.text(emailLines, textX, y);
-          y += emailLines.length * 5 + 2;
-        }
-
-        doc.save(student.id + '_qr_card.pdf');
-      } catch (e) {
-        alert('Could not generate the QR card PDF (' + e.message + '). You can still find their QR in the Codes sheet.');
-      }
-    };
-    img.onerror = function () {
-      alert('Could not load the QR image for the PDF. You can still find their QR in the Codes sheet.');
-    };
-    img.src = qrUrl;
+      doc.save(student.id + '_id_card.pdf');
+    }).catch(function (e) {
+      alert('Could not generate the ID card PDF (' + (e && e.message ? e.message : e) +
+        '). Make sure card-template.png is uploaded in the same folder as this page on GitHub Pages.');
+    });
   }
 
   function escapeHtml(str) {
@@ -1395,11 +1473,19 @@
     });
   }
 
+  let scanLockedUntil = 0; // camera reads are ignored until this timestamp (see SCAN_COOLDOWN_MS)
+
+  function handleCameraDecode(decodedText) {
+    if (Date.now() < scanLockedUntil) return; // slowmode: ignore rapid re-reads of the same/adjacent code
+    scanLockedUntil = Date.now() + SCAN_COOLDOWN_MS;
+    processCode(decodedText, false);
+  }
+
   startBtn.addEventListener('click', function () {
     showResult('idle', 'Requesting camera access...');
     html5QrCode.start(
       { facingMode: "environment" }, { fps: 10, qrbox: 250 },
-      function (decodedText) { processCode(decodedText, false); }
+      handleCameraDecode
     ).then(function () {
       cameraRunning = true;
       startBtn.classList.add('hidden');
