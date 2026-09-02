@@ -1313,8 +1313,8 @@
 
       // Name & ID values, aligned to the same baseline as their printed labels
       doc.setTextColor(255, 255, 255);
-      fitText(doc, student.name, 377 * scale, 1081 * scale, (863 - 377) * scale, 11);
-      fitText(doc, student.id, 320 * scale, 1202 * scale, (863 - 320) * scale, 11);
+      fitText(doc, student.name, 377 * scale, 1081 * scale, (863 - 377) * scale, 7);
+      fitText(doc, student.id, 320 * scale, 1202 * scale, (863 - 320) * scale, 7);
 
       doc.save(student.id + '_id_card.pdf');
     }).catch(function (e) {
