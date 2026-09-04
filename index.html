@@ -567,13 +567,13 @@
   // ============================================================
   // CONFIG — paste your Apps Script Web App URL here (ends in /exec)
   // ============================================================
-  const SCRIPT_URL = "https://shrill-block-1064.omar-gaber323.workers.dev/";
+  const SCRIPT_URL = "https://project-engine-attendance.omar-gaber323.workers.dev";
   // Upload card-template.png into the SAME GitHub repo/folder as this file.
   const CARD_TEMPLATE_URL = "card-template.png";
   // How long (ms) to ignore further camera reads after a scan is processed —
   // stops the camera re-reading the same code before the admin moves the phone.
   // Increase this later if it's still double-firing; decrease if scanning feels sluggish.
-  let SCAN_COOLDOWN_MS = 10000;
+  let SCAN_COOLDOWN_MS = 3000;
   // ============================================================
 
   const SESSIONS = 16;
@@ -1266,28 +1266,23 @@
 
   // Draws text at (x, y) shrinking the font size until it fits maxWidth (down to
   // a minimum), then truncates with an ellipsis as a last resort.
-  function fitText(doc, text, x, y, maxWidth, startSize, weight = 'normal') {
-  text = String(text || '');
-  let size = startSize;
-  
-  // استخدام الـ weight الممرر (bold أو normal)
-  doc.setFont('helvetica', weight);
-  doc.setFontSize(size);
-
-  while (size > 6 && doc.getTextWidth(text) > maxWidth) {
-    size -= 0.5;
+  function fitText(doc, text, x, y, maxWidth, startSize) {
+    text = String(text || '');
+    let size = startSize;
+    doc.setFont('helvetica', 'normal');
     doc.setFontSize(size);
-  }
-
-  if (doc.getTextWidth(text) > maxWidth) {
-    while (text.length > 1 && doc.getTextWidth(text + '…') > maxWidth) {
-      text = text.slice(0, -1);
+    while (size > 6 && doc.getTextWidth(text) > maxWidth) {
+      size -= 0.5;
+      doc.setFontSize(size);
     }
-    text = text + '…';
+    if (doc.getTextWidth(text) > maxWidth) {
+      while (text.length > 1 && doc.getTextWidth(text + '…') > maxWidth) {
+        text = text.slice(0, -1);
+      }
+      text = text + '…';
+    }
+    doc.text(text, x, y);
   }
-
-  doc.text(text, x, y);
-}
 
   // Card PDF: the actual Project Engine card design (card-template.png) is used
   // as the full-page background, with the student's QR and Name/ID overlaid at
@@ -1318,8 +1313,8 @@
 
       // Name & ID values, aligned to the same baseline as their printed labels
       doc.setTextColor(255, 255, 255);
-      fitText(doc, student.name, 377 * scale, 1081 * scale, (863 - 377) * scale, 6,'bold');
-      fitText(doc, student.id, 320 * scale, 1202 * scale, (863 - 320) * scale, 6,'bold');
+      fitText(doc, student.name, 377 * scale, 1081 * scale, (863 - 377) * scale, 11);
+      fitText(doc, student.id, 320 * scale, 1202 * scale, (863 - 320) * scale, 11);
 
       doc.save(student.id + '_id_card.pdf');
     }).catch(function (e) {
